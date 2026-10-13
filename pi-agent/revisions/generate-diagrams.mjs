@@ -1,13 +1,14 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-const commit = 'f07218c4d4bbc12bef056a7058c3dd49dfe41abe';
-const definitions = JSON.parse(readFileSync(new URL('./diagrams-v0871.json', import.meta.url), 'utf8'));
+const sourceVersion = JSON.parse(readFileSync(new URL('./source-version.json', import.meta.url), 'utf8'));
+const { commit } = sourceVersion;
+const definitions = JSON.parse(readFileSync(new URL(sourceVersion.diagramDefinitions, import.meta.url), 'utf8'));
 const esc = s => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 function text(x, y, value, cls = '') { return `<text x="${x}" y="${y}" class="${cls}">${esc(value)}</text>`; }
 function box(x,y,w,h,fill='#fffdf9') { return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${fill}" stroke="#d6cec3"/>`; }
 for (const [key,title,kind,rows,note,source] of definitions) {
-  const id = `260925-${key}`;
+  const id = `${sourceVersion.diagramPrefix}-${key}`;
   const height = kind === 'tree' ? 610 : Math.max(470, 220 + rows.length * 100);
-  let body = text(42,48, title,'title') + text(42,78,'PI SOURCE DIVE  /  v0.87.1','eyebrow');
+  let body = text(42,48, title,'title') + text(42,78,`PI SOURCE DIVE  /  v${sourceVersion.version}`,'eyebrow');
   if (kind === 'tree') {
     const nodes = [[360,108,'e1 · model_change'],[360,188,'e2 · user'],[100,298,'e3 · assistant'],[100,378,'e4 · toolResult'],[100,458,'e5 · assistant'],[610,298,'e6 · 新 user']];
     body += '<path d="M480 162V188 M480 242V265H220V298 M480 265H730V298 M220 352V378 M220 432V458" class="edge"/>';

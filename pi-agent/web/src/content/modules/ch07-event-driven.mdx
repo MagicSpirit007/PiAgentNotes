@@ -4,16 +4,16 @@ module: M07
 displayOrder: 7
 status: published
 variant: ts
-sourceVersion: "0.87.1"
+sourceVersion: "1.2.0"
 summary: 两条产品事件管道、内核的等待语义，以及可提交上下文改动的轮次和收尾边界。
 prev: ch06-messages
 next: ch08-context-engineering
 diagrams:
-  - id: 260925-ch07-event-nesting
-    file: /assets/260925-ch07-event-nesting.svg
+  - id: 261013-ch07-event-nesting
+    file: /assets/261013-ch07-event-nesting.svg
     caption: 内核事件与会话收尾边界
-  - id: 260925-ch07-two-pipelines
-    file: /assets/260925-ch07-two-pipelines.svg
+  - id: 261013-ch07-two-pipelines
+    file: /assets/261013-ch07-two-pipelines.svg
     caption: 两条管道——subscribe 与扩展 pi.on
 counterpart: ch07-event-driven.python
 ---
@@ -96,7 +96,7 @@ session.subscribe((event) => {
 
 Agent 内核层定义了 10 种 `AgentEvent`，它们构成了 Agent 运行的完整"脉搏"：
 
-<Diagram file="/assets/260925-ch07-event-nesting.svg" caption="内核事件与会话收尾边界" id="260925-ch07-event-nesting" />
+<Diagram file="/assets/261013-ch07-event-nesting.svg" caption="内核事件与会话收尾边界" id="261013-ch07-event-nesting" />
 
 **配图说明**：扩展 turn_end 提前派发一次；普通订阅仍会收到稍后的 turn_end。
 
@@ -119,7 +119,7 @@ export type AgentEvent =
   // 第4层：Tool Execution 生命周期（一次工具执行）
   | { type: "tool_execution_start"; toolCallId: string; toolName: string; args: any }
   | { type: "tool_execution_update"; toolCallId: string; toolName: string; args: any; partialResult: any }
-  | { type: "tool_execution_end"; toolCallId: string; toolName: string; result: any; isError: boolean };
+  | { type: "tool_execution_end"; toolCallId: string; toolName: string; result: any; isError: boolean; durationMs?: number };
 ```
 
 10 种看着不少，但规律很清楚——它们可以按 **4 类生命周期** 来记：开始、可选的更新、结束。消息阶段与工具执行阶段先后发生，不是彼此嵌套：
@@ -188,7 +188,7 @@ this._emit(event);                        // subscribe：不等。同步调用�
 
 这里比较的是产品层接口。内核 `agent.subscribe` 同样会 await listener，即使 listener 没有决策返回值；等待也可以用来建立事件顺序和持久化屏障。是否等待、是否读取返回值，是两个独立问题。
 
-<Diagram file="/assets/260925-ch07-two-pipelines.svg" caption="两条管道——subscribe 与扩展 pi.on" id="260925-ch07-two-pipelines" />
+<Diagram file="/assets/261013-ch07-two-pipelines.svg" caption="两条管道——subscribe 与扩展 pi.on" id="261013-ch07-two-pipelines" />
 
 **配图说明**：“不等待 Promise”不等于不阻塞：普通订阅中的同步工作照样占用调用栈。
 
@@ -381,7 +381,7 @@ async emitToolCall(event): Promise<ToolCallEventResult | undefined> {
 
 **路径 3：链式 transform 型**——还有一批决策事件走"链式 transform"，每个 handler 接收上一个的输出继续改。比如：
 
-- `emitContext()`：先处理不含 system 的 context，再处理完整的 context_with_system；转换规则见 4.8。
+- `emitContext()`：先处理不含 system 的 context，再处理完整的 context_with_system；转换规则见 4.9。
 - `emitToolResult()`（runner.ts）：链式修改工具结果，返回 `ToolResultEventResult`。
 - `emitBeforeAgentStart()`：允许调整 systemPromptOptions，并收集注入消息。
 - `emitInput()`（runner.ts）：链式改写用户输入，`action: "handled"` 短路。
@@ -420,9 +420,10 @@ interface ExtensionContext {
 | 扩展事件 | 接入位置 |
 |---|---|
 | tool_call / tool_result | Agent 的 beforeToolCall / afterToolCall |
-| input / before_agent_start | 用户输入处理与运行准备 |
+| input / before_agent_start | input 处理用户输入；before_agent_start 处理用户或空闲时的自定义消息启动 |
 | context / context_with_system | 请求前的 transformContext |
 | before_provider_request / before_provider_headers / after_provider_response | Provider 请求、请求头和响应回调 |
+| provider_stream_event | 观察归一化前已解析的 Provider 原始事件 |
 | turn_end | finishTurn 边界 |
 | agent_before_settle / agent_settled | Session 活动收尾 |
 
@@ -475,7 +476,26 @@ export default function finalCheck(pi: ExtensionAPI) {
 
 扩展的 turn_end 借助内核 `finishTurn` 提前派发，普通订阅稍后仍会收到内核的 turn_end 通知。Session 会记住已经处理的消息，避免扩展收到两次。它与下一轮 `prepareNextTurn`、每次请求前 `prepareRequest` 的位置，正好和第 3 章接上。
 
-### 4.8 两类 context 事件：是否接管系统状态
+### 4.8 启动事件：先按 messageType 收窄
+
+v1.2.0 的 `before_agent_start` 既覆盖用户 prompt，也覆盖空闲时 `pi.sendMessage(..., { triggerTurn: true })` 启动的自定义消息。事件成为判别联合：`messageType: "user"` 带 `prompt` / `images`，`messageType: "custom"` 带 `message`，没有 `prompt`。
+
+```typescript
+// 教学简化：放在 ExtensionAPI 工厂中
+pi.on("before_agent_start", (event, ctx) => {
+    if (event.messageType !== "user") return;
+    // 收窄后才能使用 event.prompt / event.images
+    console.log(event.prompt, ctx.isIdle()); // 启动阶段已是 busy，通常为 false
+});
+```
+
+启动处理器运行期间会话已算忙碌，`pi.sendMessage()` 会排入当前启动中的运行，`pi.sendUserMessage()` 需要指定 `deliverAs`。此时请求 abort 会在循环开始时生效，避免重复启动。处理器返回的注入消息和提示词修改对两种启动都有效；仅服务用户输入的逻辑应明确检查判别字段。
+
+`provider_stream_event` 让扩展观察归一化之前的已解析协议事件，内核对应 `onProviderStreamEvent`。它与统一的 `message_update` 分工不同。工具结束事件另有 `durationMs`，产品层嵌套工具事件带 `parentToolCallId`，统计时应避免把父编排与子调用重复计费。
+
+产品层的 `agent_settled` 另有 `aborted` 字段，供集成方区分取消与正常完成；不要仅凭“已收尾”就把一次取消显示成成功。
+
+### 4.9 两类 context 事件：是否接管系统状态
 
 `context` 只给 handler 看非 system 消息；每一步变换后，Pi 恢复提示词和工具声明。适合筛选对话、注入检索结果。
 
@@ -591,8 +611,8 @@ function contextExtension(pi) {
 
 ---
 
-> **本章关键源码索引**（Pi v0.87.1，固定发布提交）：
-> - [packages/agent/src/agent.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/agent.ts) — Agent.subscribe 与事件等待
-> - [packages/coding-agent/src/core/agent-session.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/agent-session.ts) — 事件翻译、边界提交、普通订阅
-> - [packages/coding-agent/src/core/extensions/runner.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/extensions/runner.ts) — 扩展派发、emitBoundary、emitContext
-> - [packages/coding-agent/src/core/extensions/types.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/extensions/types.ts) — 边界草稿与扩展事件类型
+> **本章关键源码索引**（Pi v1.2.0，固定发布提交）：
+> - [packages/agent/src/agent.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/agent.ts) — Agent.subscribe 与事件等待
+> - [packages/coding-agent/src/core/agent-session.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/agent-session.ts) — 事件翻译、边界提交、普通订阅
+> - [packages/coding-agent/src/core/extensions/runner.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/extensions/runner.ts) — 扩展派发、emitBoundary、emitContext
+> - [packages/coding-agent/src/core/extensions/types.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/extensions/types.ts) — 边界草稿与扩展事件类型

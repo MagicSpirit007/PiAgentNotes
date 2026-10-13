@@ -1,4 +1,4 @@
-> 本次修订仅覆盖源码精读 10 章的 TypeScript 网页、Markdown 与配图，源码固定为 [Pi v0.87.1](https://github.com/earendil-works/pi/releases/tag/v0.87.1)（`f07218c4d4bbc12bef056a7058c3dd49dfe41abe`）。实战篇、Skill、Python、Notebook 与既有 PDF 未更新；旧 Python 文件和直达页面保留。本轮未生成 PDF；源码精读 TS 版的静态站点已发布到本仓库的 GitHub Pages。
+> 本次修订仅覆盖源码精读 10 章的 TypeScript 网页、Markdown 与配图，源码固定为 [Pi v1.2.0](https://github.com/earendil-works/pi/releases/tag/v1.2.0)（`06a466935536f8c9bcacb2d5efc0fc021be1bdff`）。实战篇、Skill、Python、Notebook 与既有 PDF 未更新；旧 Python 文件和直达页面保留。既有 PDF 仍为历史版本；在线源码精读随本仓库 main 分支构建发布。逐章变化与复验记录见 [v1.2.0 修订说明](./pi-agent/revisions/v1.2.0.md)。
 
 
 
@@ -27,7 +27,7 @@
 
 ### 🔬 源码解读 · 10 章拆完一个生产级 SDK
 
-不是贴代码加注释，而是每章回答「是什么 / 怎么做 / 为什么」：从三层架构、Agent Loop 一路讲到上下文工程、会话管理，把 Pi 的设计取舍讲透。**TypeScript 版已更新至 Pi v0.87.1**，配有 25 张新版源码图。原有 [Agent Loop 实验场](./pi-agent/notebooks/agent-loop.ipynb) 保留旧版内容。
+不是贴代码加注释，而是每章回答「是什么 / 怎么做 / 为什么」：从三层架构、Agent Loop 一路讲到上下文工程、会话管理，把 Pi 的设计取舍讲透。**TypeScript 版已更新至 Pi v1.2.0**，配有 25 张新版源码图。原有 [Agent Loop 实验场](./pi-agent/notebooks/agent-loop.ipynb) 保留旧版内容。
 
 **怎么读**：[TS 版目录](./pi-agent/pi_source_dive/typescript/) · [在线版](https://magicspirit007.github.io/pi-latest/) · [PDF 下载（原仓库 Releases）](https://github.com/buchidonggua/dg-ai-notes/releases)
 

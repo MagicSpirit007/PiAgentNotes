@@ -1,4 +1,4 @@
-> 本次修订仅覆盖源码精读 10 章的 TypeScript 网页、Markdown 与配图，源码固定为 [Pi v0.87.1](https://github.com/earendil-works/pi/releases/tag/v0.87.1)（`f07218c4d4bbc12bef056a7058c3dd49dfe41abe`）。实战篇、Skill、Python、Notebook 与既有 PDF 未更新；旧 Python 文件和直达页面保留。本轮未生成 PDF；源码精读 TS 版的静态站点已发布到本仓库的 GitHub Pages。
+> 本次修订仅覆盖源码精读 10 章的 TypeScript 网页、Markdown 与配图，源码固定为 [Pi v1.2.0](https://github.com/earendil-works/pi/releases/tag/v1.2.0)（`06a466935536f8c9bcacb2d5efc0fc021be1bdff`）。实战篇、Skill、Python、Notebook 与既有 PDF 未更新；旧 Python 文件和直达页面保留。既有 PDF 仍为历史版本；在线源码精读随本仓库 main 分支构建发布。逐章变化与复验记录见 [v1.2.0 修订说明](./revisions/v1.2.0.md)。
 
 # Pi-Agent 双轨教程
 
@@ -28,7 +28,7 @@
 
 ## 🔬 源码精读篇 · 10 章
 
-10 章系统拆解 pi-agent 的源码设计与实现，每章回答「是什么 / 怎么做 / 为什么」。提供 **TypeScript 版已更新至 Pi v0.87.1**。
+10 章系统拆解 pi-agent 的源码设计与实现，每章回答「是什么 / 怎么做 / 为什么」。提供 **TypeScript 版已更新至 Pi v1.2.0**。
 
 > 路径：[pi_source_dive/typescript/](./pi_source_dive/typescript/) · 在线版见 [本仓镜像](https://magicspirit007.github.io/pi-latest/) ／ [原站](https://dg-ai-notes.pages.dev)
 
@@ -73,7 +73,7 @@ npm run dev      # http://localhost:4321
 
 ## 📥 历史 PDF 下载
 
-既有 PDF 保留原版本，未纳入此次 v0.87.1 修订。PDF 不进 git 仓库，通过 GitHub Releases 分发：
+既有 PDF 保留原版本，未纳入此次 v1.2.0 修订。PDF 不进 git 仓库，通过 GitHub Releases 分发：
 
 1. 进入 [Releases 页面](https://github.com/buchidonggua/dg-ai-notes/releases)
 2. 下载对应版本：

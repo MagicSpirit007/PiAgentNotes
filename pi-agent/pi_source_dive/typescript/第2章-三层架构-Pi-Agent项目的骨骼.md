@@ -12,16 +12,15 @@
 repo/
 ├── packages/
 │   ├── ai/              ← 模型、Provider 与 API 适配
-│   ├── agent/           ← Agent 循环、Harness 与会话基础设施
+│   ├── agent/           ← Agent 循环、状态、事件与代理流
 │   ├── coding-agent/    ← 编码产品与 SDK
 │   ├── tui/             ← 终端界面
 │   ├── chord/           ← 服务、状态、RPC 与插件的组合运行时
 │   ├── telemetry/       ← 遥测契约
 │   ├── durable/         ← 持久化 conversation / task / document
-│   ├── protocol/        ← 远程会话协议
-│   ├── client/          ← 远程客户端
-│   ├── server/          ← 实验性服务端
-│   ├── session-backends/← 会话存储后端
+│   ├── codemode/        ← JavaScript 工具编排
+│   ├── mcp/             ← MCP 客户端与认证
+│   ├── env/             ← 执行环境抽象
 │   └── evals/           ← 评估
 ├── package.json         ← npm workspaces
 └── tsconfig.json
@@ -57,7 +56,7 @@ repo/
 
 ```typescript
 // 教学简化：省略外围定义，展示数据形状或关键步骤
-// packages/ai/src/index.ts（v0.87.1 节选）
+// packages/ai/src/index.ts（v1.2.0 节选）
 // 顶部注释明确写：Core only, side-effect free: no generated catalogs,
 // no provider factories, no api-registry, no OAuth implementations, no compat.
 // 全局 API 注册表、stream/complete 函数等已迁至 ./compat.ts（packages/ai/src/compat.ts）
@@ -90,7 +89,7 @@ export * from "./utils/event-stream.ts"  // 事件流基类
 - 怎么维护对话状态（`AgentState`）
 - 怎么跑一个"调用 LLM → 执行工具 → 再调用 LLM"的循环（`agentLoop`）
 - 怎么在循环过程中发出事件，让外部知道发生了什么（`AgentEvent`）
-- 同一个包还导出 Harness、Session 与压缩基础设施；这些不等于 `Agent` 类自动带上的产品能力
+- v1.0.0 起，旧实验性 Harness、会话存储和压缩辅助已移出这个包；持久运行请查 `@earendil-works/pi-durable`
 
 看它的 `index.ts` 导出：
 
@@ -99,12 +98,12 @@ export * from "./utils/event-stream.ts"  // 事件流基类
 // packages/agent/src/index.ts（节选）
 export * from "./agent.ts"               // Agent 类
 export * from "./agent-loop.ts"          // 循环函数
-export * from "./harness/session/index.ts"    // 会话管理
-// 还按名称导出 Harness 的压缩与分支摘要函数
+export * from "./proxy.ts"               // 代理流
+export { setDefaultStreamFn } from "./stream-fn.ts"
 export * from "./types.ts"              // 类型定义
 ```
 
-`Agent` 循环通过工具接口工作，不硬编码 read 或 bash。不过包里还包含供 Harness 使用的文件和 shell 工具。**类的职责和整个包的导出范围要分开看**，否则会把另一条实现路径误塞进当前调用链。
+`Agent` 循环通过工具接口工作，不硬编码 read 或 bash。旧 `./node`、`./harness/*`、`./experimental/pico3` 导出已删除；这不是给旧导入路径换个版本号就能完成的迁移。默认编码工具属于 coding-agent，通用持久会话属于 pi-durable。
 
 ### 2.3 pi-coding-agent：管"具体业务"
 
@@ -116,7 +115,7 @@ export * from "./types.ts"              // 类型定义
 
 这一层是最"厚"的——包含大量产品代码。因为它知道所有具体的事：
 
-- 8 种内置工具（read、bash、powershell、edit、write、grep、find、ls），以及默认启用的 4 个工具怎么实现
+- 8 种基础编码工具及默认启用的 4 个工具，以及内置 codemode、tool_search、MCP 扩展如何组合
 - 扩展系统怎么加载和运行
 - 会话怎么持久化到磁盘
 - CLI 怎么解析参数、怎么在终端渲染输出
@@ -156,9 +155,9 @@ main(process.argv.slice(2));
 
 ### 2.5 旁边的新基础设施：先认路，不抢主线
 
-`chord` 提供服务、状态、RPC 和插件的组合机制；`telemetry` 定义观测契约；`durable` 处理持久化的 conversation、task 和 document。远程会话则另有 protocol、client 和实验性 server。
+`chord` 提供服务、状态、RPC 和插件的组合机制；`telemetry` 定义观测契约；`durable` 处理持久化的 conversation、task 和 document。v1.2.0 已移除未正式发布的 protocol、client 和实验性 server 包，coding-agent 也不再依赖 chord。
 
-还有一处容易走错：agent 包同时导出 `Agent` 和 `AgentHarness`。v0.87.1 的 Harness 已有独立运行时和会话模型，不能沿用旧版“只是未实现脚手架”的说法；但默认 `createAgentSession()` 仍然创建 `Agent`，会话由 coding-agent 的 `SessionManager` 管理。
+还有一处容易走错：v1.0.0 已从 agent-core 删除旧 `AgentHarness` 与 session storage 导出；当前持久运行基础设施属于独立的 pi-durable 包。默认 `createAgentSession()` 仍然创建 `Agent`，会话由 coding-agent 的 `SessionManager` 管理。
 
 后面讲一次普通 SDK 请求时，我们始终跟这条主线。第 10 章再对照两套会话实现，理解它们各自负责什么。新增包的存在，不意味着默认 CLI 已经全部迁移过去。
 
@@ -203,9 +202,9 @@ main(process.argv.slice(2));
 ```json
 // packages/coding-agent/package.json
 "dependencies": {
-    "@earendil-works/pi-agent-core": "^0.87.1",   // ← 依赖中间层，合理
-    "@earendil-works/pi-ai": "^0.87.1",            // ← 也直接依赖底层？
-    "@earendil-works/pi-tui": "^0.87.1",
+    "@earendil-works/pi-agent-core": "^1.2.0",   // ← 依赖中间层，合理
+    "@earendil-works/pi-ai": "^1.2.0",            // ← 也直接依赖底层？
+    "@earendil-works/pi-tui": "^1.2.0",
     // ... 其他依赖
 }
 ```
@@ -252,8 +251,8 @@ pi-agent-core 的类型定义里，大量基础类型都是从 pi-ai 导入的�
 | 包 | 依赖了谁 | 有没有反向依赖？ |
 |---|---------|---------------|
 | pi-ai | Provider SDK、pi-telemetry | 不依赖 agent-core 或 coding-agent |
-| pi-agent-core | pi-ai、chord、pi-telemetry 等 | 不依赖 coding-agent |
-| pi-coding-agent | pi-ai、pi-agent-core、pi-tui、chord 等 | 组合模型、引擎与界面 |
+| pi-agent-core | pi-ai、typebox | 不依赖 coding-agent |
+| pi-coding-agent | pi-ai、pi-agent-core、pi-tui、pi-codemode、pi-mcp 等 | 组合模型、引擎、界面与工具编排；不再依赖 chord |
 
 用一张图表示：
 
@@ -266,7 +265,7 @@ pi-ai（底层）
   │         │
   └─── pi-coding-agent（顶层）
 
-共享基础设施 chord / telemetry 位于这条产品主线旁边
+其他包按各自职责组合；不能把仓库中的包都算作 Agent 的依赖
 ```
 
 所有箭头都朝上。**底层永远不知道上层的存在**——pi-ai 的代码里没有任何一个 import 指向 pi-agent-core 或 pi-coding-agent。这就是分层的真正规则：**不是限制引用层级，而是控制依赖方向必须单向向上。**
@@ -412,7 +411,7 @@ interface ToolDefinition {
 
 每一层只关心自己该关心的事，通过继承或组合在下层类型的基础上扩展。底层类型从不修改——pi-ai 的 `Tool` 接口里没有 `execute` 字段，因为 LLM 不需要知道工具怎么执行。
 
-![三层类型递进扩展](assets/260925-ch02-type-progression.svg)
+![三层类型递进扩展](assets/261013-ch02-type-progression.svg)
 
 **配图说明**：各层保留自己的职责；应用消息在 convertToLlm 处收敛。
 
@@ -560,8 +559,9 @@ Pi 的三层都能通过这个测试：
 
 ---
 
-> **本章关键源码索引**（Pi v0.87.1，固定发布提交）：
-> - [packages/agent/src/types.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/types.ts) — AgentMessage 与 AgentTool
-> - [packages/coding-agent/src/core/extensions/types.ts#L455](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/extensions/types.ts#L455) — ToolDefinition
-> - [packages/agent/src/harness/agent-harness.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/harness/agent-harness.ts) — Harness 独立运行实现
-> - [packages/ai/src/index.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/ai/src/index.ts) — AI 包主入口
+> **本章关键源码索引**（Pi v1.2.0，固定发布提交）：
+> - [packages/agent/src/types.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/types.ts) — AgentMessage 与 AgentTool
+> - [packages/coding-agent/src/core/extensions/types.ts#L579](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/extensions/types.ts#L579) — ToolDefinition
+> - [packages/durable/src/harness/harness.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/durable/src/harness/harness.ts) — 独立 durable Harness
+> - [packages/ai/src/index.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/ai/src/index.ts) — AI 包主入口
+> - [packages/agent/src/index.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/index.ts) — 精简后的 Agent Core 公共入口

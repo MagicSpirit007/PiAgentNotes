@@ -4,12 +4,12 @@ module: M01
 displayOrder: 1
 status: published
 variant: ts
-sourceVersion: "0.87.1"
+sourceVersion: "1.2.0"
 summary: Pi 是什么、为什么学它。本章打开 Pi-Agent 全貌，建立后续章节的知识地图。
 next: ch02-three-layer-arch
 diagrams:
-  - id: 260925-ch01-four-layer-architecture
-    file: /assets/260925-ch01-four-layer-architecture.svg
+  - id: 261013-ch01-four-layer-architecture
+    file: /assets/261013-ch01-four-layer-architecture.svg
     caption: Pi-Agent 四层架构
 counterpart: ch01-overview.python
 ---
@@ -45,16 +45,16 @@ import Diagram from '../../components/Diagram.astro';
 拆开来看：
 
 - **"编码 Agent"** — 它能读懂你的代码库，写代码、改代码、跑命令，像一个坐在你旁边的结对编程伙伴
-- **"终端外壳"** — 它住在终端里，没有 GUI，没有 IDE 插件，输出写进终端回滚缓冲区。这决定了它的一切后续设计选择
+- **"终端外壳"** — 它住在终端里，没有 GUI，没有 IDE 插件，v1.2.0 默认使用全屏 TUI；设置 `tuiMode: "regular"` 或传入 `--tui-mode regular` 可保留终端原生回滚区
 - **"极简"** — 默认启用 read / bash / edit / write 四个工具，把循环、工具和扩展接口做成可组合的零件。系统提示词会随工具、Skills、项目指令和扩展变化；“极简”说的是产品取舍，不是永远不变的代码行数
 
 - **"可扩展"** — 极简核心之上的缺失功能，通过 TypeScript 扩展、技能、Pi Package 来补充
 
 ### 先记住几项不会把你带偏的事实
 
-| 看什么 | v0.87.1 的实际含义 |
+| 看什么 | v1.2.0 的实际含义 |
 |------|------|
-| 内置工具 | 8 种：read / bash / powershell / edit / write / grep / find / ls；默认启用其中 read / bash / edit / write |
+| 基础编码工具 | 8 种：read / bash / powershell / edit / write / grep / find / ls；默认启用 read / bash / edit / write。内置扩展另提供 codemode、tool_search 与配置的 MCP 工具 |
 | 学习主线 | pi-ai → pi-agent-core → pi-coding-agent；pi-tui 在旁边负责显示 |
 | 模型支持 | 按 Provider 和 API 协议分工；内置目录之外还可以接自定义模型 |
 | 使用入口 | 交互 CLI、print/JSON、RPC，以及嵌入应用的 SDK |
@@ -79,11 +79,11 @@ import Diagram from '../../components/Diagram.astro';
 
 这四个包里，`pi-ai / pi-agent-core / pi-coding-agent` 构成一条**三层堆栈**（每层可独立使用），`pi-tui` 是一个**正交的 UI 库**，与 Agent 体系完全解耦——你可以只用 `pi-ai` 调模型，也可以用 `pi-agent-core` 在你自己的应用里跑 Agent Loop，完全不需要碰 CLI。这是 Pi 作为 SDK 的核心价值，我们在第五节细讲。
 
-<Diagram file="/assets/260925-ch01-four-layer-architecture.svg" caption="Pi-Agent 四层架构" id="260925-ch01-four-layer-architecture" />
+<Diagram file="/assets/261013-ch01-four-layer-architecture.svg" caption="Pi-Agent 四层架构" id="261013-ch01-four-layer-architecture" />
 
 **配图说明**：依赖由上到下；pi-tui 与 Agent 内核没有上下层调用关系。
 
-> 当前仓库还有 chord、telemetry、durable，以及远程会话协议、客户端和服务端等包。它们说明 Pi 的范围已经扩大，但默认 SDK 的入口仍可沿 `createAgentSession → AgentSession → Agent` 读下去。
+> 当前仓库还有 codemode、mcp、env、durable、chord、telemetry 等包。v1.0.0 已从 agent-core 移除旧实验性 Harness，v1.2.0 又移除了未正式发布的远程 protocol/client/server 栈。默认 SDK 仍沿 `createAgentSession → AgentSession → Agent` 运行；持久运行需求另看 pi-durable。
 
 ---
 
@@ -99,7 +99,7 @@ import Diagram from '../../components/Diagram.astro';
 
 - 为什么系统提示词由工具和资源按需组装？因为"该说什么"应该由你决定，不该被框架预判
 - 为什么默认只启用 4 个工具（read / write / edit / bash）？先给模型一组通用操作，其他内置工具与扩展按任务启用
-- 为什么默认编码主链路没有预装 MCP / 计划模式 / 子 Agent / 待办？因为这些都是"整车上的功能"，Pi 把它们留给你——你想用什么模式，就用扩展去搭
+- 为什么计划模式、子 Agent 和待办仍可由扩展搭建？因为具体工作流由使用者决定；MCP 则已成为内置扩展，不应再列入“没有预装”的功能
 
 社区观察者 Pasquale 把这个分野说得最锋利：
 
@@ -111,7 +111,7 @@ import Diagram from '../../components/Diagram.astro';
 
 ### 3.2 五根定制杠杆：Pi 没有的功能，全都可以自己造
 
-§3.1 说过，默认编码主链路把 MCP、计划模式、子 Agent、自动续跑策略和待办留给扩展——你可能要问：那这些"商业 Agent 标配功能"我想要怎么办？
+§3.1 说过，计划模式、子 Agent、自动续跑策略和待办可以通过扩展组合；MCP 和 codemode 已有内置实现——你可能要问：那这些"商业 Agent 标配功能"我想要怎么办？
 
 答案就在 §3.1 那句"它不给你计划模式，它给你**构造计划模式所需的构建块**"。Pi 给你**五根杠杆**来把它塑形成你想要的形状——前四根用于自己用，第五根用于把成果分享出去。**这五根杠杆本身才是 Pi 真正的能力所在**：极简的核心 + 强大的杠杆，让你拿到的是"一个能长成任何形状的 Agent"，而不是"一个被作者决定了长成什么形状的 Agent"。
 
@@ -123,9 +123,9 @@ import Diagram from '../../components/Diagram.astro';
 
 关键是：**§3.1 列出的那些"Pi 没有的功能"，全部都能用扩展实现**。发布版仓库的 examples/extensions 提供了计划模式、子 Agent、工具拦截等扩展示例。原书在这里想强调的是：
 
-> "那些你大概以为是默认行为的内置能力——**子 Agent、计划模式、权限门禁、自定义编辑器**——都可以通过扩展组合；隔离与 MCP 接入也可以另行集成。"
+> "那些你大概以为是默认行为的内置能力——**子 Agent、计划模式、权限门禁、自定义编辑器**——都可以通过扩展组合；隔离可以另行集成，MCP 则可以直接配置内置接入。"
 
-把这句话翻成大白话：商业 Agent 把这些功能焊死在产品里，Pi 把它们拆下来变成可选模块。你想要 MCP？装一个 MCP 扩展就行。你想要子 Agent？派生一个新的 Pi 实例的扩展就有现成的。你想要 loop 模式（让 Agent 自己迭代到任务完成）？写一个扩展拦截 `turn_end` 事件再触发下一轮就行——扩展怎么写，实战上手篇第 6 章"事件监听"会带你入门。
+把这句话翻成大白话：商业 Agent 把这些功能焊死在产品里，Pi 把它们拆下来变成可选模块。你想要 MCP？配置全局或受信任项目的 `mcp.json`，通过 `/mcp` 管理连接即可。你想在一段 JavaScript 中编排工具？用 `pi --tools +codemode` 启用内置 codemode。你想要子 Agent？派生一个新的 Pi 实例的扩展就有现成的。你想要 loop 模式（让 Agent 自己迭代到任务完成）？写一个扩展拦截 `turn_end` 事件再触发下一轮就行——扩展怎么写，实战上手篇第 6 章"事件监听"会带你入门。
 
 更狠的是——**如果官方扩展没满足你，你可以自己写一个完全按你需求的**。Mario 描述过一个例子：有人五分钟写了一套 read、write、edit、bash，通过 SSH 操作远程机器——彻底替换掉了内置工具。如果你想给 Pi 加一个权限审批弹窗（毕竟默认没有逐工具审批），一段扩展代码就够了。如果你想 fork 出一套完全不同的 UI（比如把 Agent 跑在浏览器里、用 React 重画界面），也办得到。**Pi 的能力，随你愿意定制它的意愿而线性增长**。
 
@@ -142,6 +142,8 @@ import Diagram from '../../components/Diagram.astro';
 **主题（Themes）——可实时重载的 TUI 皮肤**
 
 TUI 的图形主题。在会话进行中切换，立即生效。这是杠杆里最轻的一根，但对长期使用者来说很重要——你要看一个工具一整天，它得让你眼睛舒服。
+
+v1.2.0 发布了 settings、models、keybindings 和 theme 的 JSON Schema，可用 `$schema` 获得编辑器校验与补全。旧主题迁移时应把引用改为 `https://pi.dev/schemas/theme.schema.json`，可复用颜色放进 `vars`，移除不受支持的元数据；启动时也会执行主题校验。
 
 **Pi 包（Pi Packages）——把上面四样打包分发**
 
@@ -178,12 +180,12 @@ pi install git:github.com/user/repo
 ### 3.4 上手一分钟
 
 ```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.87.1
+npm install -g @earendil-works/pi-coding-agent@1.2.0
 
 
 ```
 
-然后在任意项目目录里运行 `pi`。设一个 `ANTHROPIC_API_KEY` 环境变量，或者用 `/login` 完成认证，就可以开始了。
+需要 Node.js ≥ 22.19.0。然后在任意项目目录里运行 `pi`。设一个 `ANTHROPIC_API_KEY` 环境变量，或者用 `/login` 完成认证，就可以开始了。
 
 ### 3.5 不靠环境变量：用 `models.json` 定义第三方模型
 
@@ -195,6 +197,7 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.87.1
 
 ```json
 {
+  "$schema": "https://pi.dev/schemas/models.schema.json",
   "providers": {
     "company": {
       "baseUrl": "https://llm.example.com/v1",
@@ -226,7 +229,7 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.87.1
 2. **设为默认**：编辑 `~/.pi/agent/settings.json`，加上 `"defaultProvider": "company"` 和 `"defaultModel": "company-chat"`，启动 Pi 就直接用它
 3. **命令行查列表**：`pi models`（或 `pi models company` 做过滤）—— 出错时会在终端顶部打印 `models.json` 的解析错误，方便排查
 
-models.json 还可以覆盖内置模型字段、配置协议兼容选项。这里先记住分工：**模型目录说明“能选什么”，认证决定“能调用什么”，API 适配器负责“怎么调用”**。完整格式见发布版的 [models.md](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/docs/models.md)。
+models.json 还可以覆盖内置模型字段、配置协议兼容选项。这里先记住分工：**模型目录说明“能选什么”，认证决定“能调用什么”，API 适配器负责“怎么调用”**。完整格式见发布版的 [models.md](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/docs/models.md)。
 
 
 ---
@@ -268,11 +271,10 @@ Pi 的整个仓库已经不小，但学习入口仍然清楚：先读一个循�
 
 看一个"什么都做了"的框架，你只能学到"他们做了什么"。看一个刻意什么都不做的框架，你才能学到"做 Agent 到底需要什么"。
 
-原书把这套思路叫作“减法哲学”。在 v0.87.1，下面的取舍应限定在本书跟踪的默认编码主链路；仓库里的 Harness、远程服务和扩展示例另有职责，不能用这张表概括整个仓库：
+原书把这套思路叫作“减法哲学”。在 v1.2.0，下面的取舍应限定在默认编码工作流。MCP、codemode 和 tool_search 已内置；可组合并不意味着永远不新增基础能力：
 
 | 默认主链路不预装的 | 设计取舍 | 组合方式 |
 |-----------|-----------|----------|
-| MCP 支持 | 工具目录可能占用较多提示词空间 | 带 README 的 CLI 工具，Agent 按需读取 |
 | 子 Agent | 增加复杂度，降低可观察性 | tmux 多实例，或专用扩展 |
 | 权限弹窗 | 导致"弹窗疲劳"，沦为安全表演 | 容器化隔离，或用扩展搭审批流程 |
 | 计划模式 | 计划写到 markdown 文件里更持久、可复用 | 写 plan.md 文件 |
@@ -372,7 +374,7 @@ try {
 
 **侧库: `pi-tui` — 一个与 Agent 无关的终端 UI 库**
 
-把 `pi-tui` 单独拿出来说，是因为它有个特别的属性：**完全独立于 Pi 的 Agent 体系**。它的 [package.json](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/tui/package.json) 只依赖 `get-east-asian-width`和 `marked`（markdown 解析）两个包，源码里零处 `import` 来自 `@earendil-works/pi-*` 的兄弟包。反倒是 coding-agent 单向依赖它（比如 [list-models.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/cli/list-models.ts) 从 pi-tui 引入 `fuzzyFilter`）。
+把 `pi-tui` 单独拿出来说，是因为它有个特别的属性：**完全独立于 Pi 的 Agent 体系**。它的 [package.json](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/tui/package.json) 只依赖 `get-east-asian-width`和 `marked`（markdown 解析）两个包，源码里零处 `import` 来自 `@earendil-works/pi-*` 的兄弟包。反倒是 coding-agent 单向依赖它（比如 [list-models.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/cli/list-models.ts) 从 pi-tui 引入 `fuzzyFilter`）。
 
 `pi-tui` 是 Mario 的老本行（libGDX 游戏引擎作者）的作品，它实现了：
 
@@ -443,14 +445,14 @@ Pi 是一个"三位一体"的项目：
 
 > ### 版本说明
 >
-> 本文档系列基于 Pi **v0.87.1**，固定提交 `f07218c4d4bbc12bef056a7058c3dd49dfe41abe`。源码链接指向这一提交，不随 main 漂移。Python 转写与实战篇属于各自的旧版材料，本次只修订 TypeScript 源码精读。
+> 本文档系列基于 Pi **v1.2.0**，固定提交 `06a466935536f8c9bcacb2d5efc0fc021be1bdff`。源码链接指向这一提交，不随 main 漂移。Python 转写与实战篇属于各自的旧版材料，本次只修订 TypeScript 源码精读。
 
 
 
 
 ---
 
-> **本章关键源码索引**（Pi v0.87.1，固定发布提交）：
-> - [packages/coding-agent/src/core/sdk.ts#L175](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/sdk.ts#L175) — createAgentSession
-> - [packages/coding-agent/src/core/tools/index.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/tools/index.ts) — 工具工厂与默认集合
-> - [packages/tui/package.json](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/tui/package.json) — pi-tui 的独立依赖
+> **本章关键源码索引**（Pi v1.2.0，固定发布提交）：
+> - [packages/coding-agent/src/core/sdk.ts#L191](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/sdk.ts#L191) — createAgentSession
+> - [packages/coding-agent/src/core/tools/index.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/tools/index.ts) — 工具工厂与默认集合
+> - [packages/tui/package.json](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/tui/package.json) — pi-tui 的独立依赖

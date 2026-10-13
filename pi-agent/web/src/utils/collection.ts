@@ -35,7 +35,7 @@ export const SERIES_META: Record<'internals' | 'practice', SeriesMeta> = {
     book: 'internals',
     label: '源码学习',
     eyebrow: '源码学习',
-    tagline: 'TypeScript · Pi v0.87.1 · 10 章拆解 Agent SDK',
+    tagline: 'TypeScript · Pi v1.2.0 · 10 章拆解 Agent SDK',
     audience: '想看懂 Harness 设计、理解 Agent 内部运转的工程师',
   },
   practice: {

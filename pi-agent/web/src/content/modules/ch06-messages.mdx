@@ -4,16 +4,16 @@ module: M06
 displayOrder: 6
 status: published
 variant: ts
-sourceVersion: "0.87.1"
+sourceVersion: "1.2.0"
 summary: 系统提示词与工具变化也进入消息记录；AgentMessage 经转换与归一化形成模型请求。
 prev: ch05-tools
 next: ch07-event-driven
 diagrams:
-  - id: 260925-ch06-two-layer-messages
-    file: /assets/260925-ch06-two-layer-messages.svg
+  - id: 261013-ch06-two-layer-messages
+    file: /assets/261013-ch06-two-layer-messages.svg
     caption: 两层消息——内富外严的双层设计
-  - id: 260925-ch06-message-pipeline
-    file: /assets/260925-ch06-message-pipeline.svg
+  - id: 261013-ch06-message-pipeline
+    file: /assets/261013-ch06-message-pipeline.svg
     caption: 消息处理管道
 counterpart: ch06-messages.python
 ---
@@ -52,7 +52,7 @@ UserMessage、AssistantMessage、ToolResultMessage——这三个名字反复出
 
 在了解消息怎么变换之前，先搞清楚"变换的目标"长什么样。LLM 能理解的消息格式，在 Pi 里叫做 **Message** 类型，定义在最底层的 `packages/ai/src/types.ts` 里。
 
-v0.87.1 的 Message 有四个成员：
+v1.2.0 的 Message 有四个成员：
 
 ```
 Message 联合类型（Pi 的统一格式）
@@ -131,6 +131,8 @@ content 可以是一个纯字符串，也可以是一个内容块数组。这意
     usage: Usage,               // token 用量统计
     stopReason: StopReason,     // 停止原因（含 pending/stop/length/toolUse/error/aborted/deferred）
     errorMessage?: string,      // 错误信息
+    thinkingLevel?: ModelThinkingLevel, // 本次请求记录的思考级别
+    durationMs?: number,        // 请求到最终响应的耗时
     timestamp: number
 }
 ```
@@ -165,9 +167,13 @@ AssistantMessage 的 content 内容块
     content: (TextContent | ImageContent)[],        // 结果内容
     details?: TDetails,                             // 结构化详情（给 UI 看的）
     isError: boolean,                               // 是否执行失败（工具错误的消息表示）
+    durationMs?: number,                            // 实际 execute 耗时
+    nestedCalls?: NestedToolCalls,                  // 产品层记录的有界嵌套调用摘要
     timestamp: number
 }
 ```
+
+`structuredContent` 是工具调用结果给程序的返回通道，不会自动成为 `ToolResultMessage` 发给模型；`details`、`nestedCalls` 和可见 `content` 也有各自用途，不能混作一份完整审计日志。
 
 新版工具参数使用 JSON 对象，持久化的 details 也受 JSON 兼容性约束；不要把函数或 Date 实例当成可原样恢复的工具详情。
 
@@ -225,7 +231,7 @@ Pi 的设计是**两边都不妥协**：**以结构化的形式存进 `context.m
 
 **Pi 的解法是：允许应用自定义消息类型。** `pi-agent-core` 在 AgentMessage 联合类型里预留了一个扩展点（叫 `CustomAgentMessages`，下一节会展开它的实现原理），应用通过 TypeScript 的声明合并往里加自己的消息类型。每个应用只注册自己需要的——核心包零依赖，应用层全栈类型安全。
 
-以 pi 自带的 coding-agent 为例，它在 [packages/coding-agent/src/core/messages.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/messages.ts) 里定义了 4 种自定义消息：
+以 pi 自带的 coding-agent 为例，它在 [packages/coding-agent/src/core/messages.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/messages.ts) 里定义了 4 种自定义消息：
 
 ```
 coding-agent 的自定义消息类型
@@ -271,7 +277,7 @@ coding-agent 的自定义消息类型
 
 这就是 Pi 消息系统的核心设计：**不用一种格式打天下，而是用两层——内层丰富、外层严格。**
 
-<Diagram file="/assets/260925-ch06-two-layer-messages.svg" caption="两层消息——内富外严的双层设计" id="260925-ch06-two-layer-messages" />
+<Diagram file="/assets/261013-ch06-two-layer-messages.svg" caption="两层消息——内富外严的双层设计" id="261013-ch06-two-layer-messages" />
 
 **配图说明**：CustomEntry 是会话元数据，不等于给模型看的 CustomMessage。
 
@@ -442,7 +448,7 @@ coding-agent 的 `convertToLlm` 核心逻辑是一个 switch 语句，按 `role`
 
 ## 六、两阶段管道：为什么 transformContext 和 convertToLlm 分开？
 
-<Diagram file="/assets/260925-ch06-message-pipeline.svg" caption="消息处理管道" id="260925-ch06-message-pipeline" />
+<Diagram file="/assets/261013-ch06-message-pipeline.svg" caption="消息处理管道" id="261013-ch06-message-pipeline" />
 
 **配图说明**：display:false 只影响显示；是否发送给模型由转换逻辑决定。
 
@@ -493,7 +499,7 @@ case "bashExecution":
 |-----------|------------|------------|---------|---------|
 | 全可见 | 是 | 是 | convertToLlm 正常转换 | 普通的 BashExecution、User、Assistant |
 | LLM 不可见 | 否 | 是 | `excludeFromContext = true` | `!!` 前缀的 Bash 执行 |
-| UI 隐藏、模型可见 | 是 | 否 | CustomMessage 的 `display: false` | 扩展注入的隐藏提示 |
+| UI 默认隐藏、模型可见 | 是 | 默认隐藏；HTML 导出可显示 | CustomMessage 的 `display: false` | 扩展注入的隐藏提示 |
 | 仅持久化元数据 | 否 | 通常否 | `pi.appendEntry()` 写 CustomEntry，不是 CustomMessage | 扩展自己的恢复状态 |
 
 ---
@@ -595,8 +601,8 @@ case "bashExecution":
 
 ---
 
-> **本章关键源码索引**（Pi v0.87.1，固定发布提交）：
-> - [packages/ai/src/types.ts#L491](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/ai/src/types.ts#L491) — SystemMessage 与四种标准 Message
-> - [packages/ai/src/utils/transcript.ts#L73](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/ai/src/utils/transcript.ts#L73) — 系统内容追加、sections 与工具重放
-> - [packages/coding-agent/src/core/messages.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/messages.ts) — convertToLlm 与自定义消息
-> - [packages/agent/src/types.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/types.ts) — CustomAgentMessages 声明扩展
+> **本章关键源码索引**（Pi v1.2.0，固定发布提交）：
+> - [packages/ai/src/types.ts#L541](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/ai/src/types.ts#L541) — SystemMessage 与四种标准 Message
+> - [packages/ai/src/utils/transcript.ts#L73](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/ai/src/utils/transcript.ts#L73) — 系统内容追加、sections 与工具重放
+> - [packages/coding-agent/src/core/messages.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/messages.ts) — convertToLlm 与自定义消息
+> - [packages/agent/src/types.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/types.ts) — CustomAgentMessages 声明扩展

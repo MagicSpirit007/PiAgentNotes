@@ -4,16 +4,16 @@ module: M05
 displayOrder: 5
 status: published
 variant: ts
-sourceVersion: "0.87.1"
+sourceVersion: "1.2.0"
 summary: 工具系统五步管道：定义、注册、拦截、执行、回收。Agent 的手脚怎么被管住。
 prev: ch04-model-call
 next: ch06-messages
 diagrams:
-  - id: 260925-ch05-five-step-pipeline
-    file: /assets/260925-ch05-five-step-pipeline.svg
+  - id: 261013-ch05-five-step-pipeline
+    file: /assets/261013-ch05-five-step-pipeline.svg
     caption: 工具调用五步管道
-  - id: 260925-ch05-parallel-sequential
-    file: /assets/260925-ch05-parallel-sequential.svg
+  - id: 261013-ch05-parallel-sequential
+    file: /assets/261013-ch05-parallel-sequential.svg
     caption: 并行 vs 串行 三阶段设计
 counterpart: ch05-tools.python
 ---
@@ -148,7 +148,21 @@ export function wrapToolDefinition(definition, ctxFactory?) {
 
 ### 注册与启用：有名片，不等于已经上场
 
-v0.87.1 提供 `read`、`bash`、`powershell`、`edit`、`write`、`grep`、`find`、`ls` 八种内置工具，默认启用 read、bash、edit、write。SDK 的 `tools` 是**工具名白名单**，不是 ToolDefinition 数组；自定义定义放到 `customTools`，扩展则用 `pi.registerTool()` 注册。注册后是否进入当前请求，还取决于启用集合；扩展可用 `pi.setActiveTools()` 调整。
+v1.2.0 的基础工具工厂仍提供 `read`、`bash`、`powershell`、`edit`、`write`、`grep`、`find`、`ls`，默认基础集合为 read、bash、edit、write。内置扩展还提供 codemode、tool_search 和 MCP 工具；不能把“八种基础工具”当成全部工具的上限。
+
+SDK 的 `tools` 接收工具名或 `*` 模式，不是 ToolDefinition 数组。全为 `+name` / `-name` 的列表表示增减默认集合，不能与普通白名单混用。MCP 工具默认仍可注册供 codemode/搜索使用；白名单含 `mcp__` 前缀时才据此过滤 MCP，空列表或 `noTools: "all"` 则禁用全部工具。自定义定义放 `customTools`，扩展用 `pi.registerTool()` 注册。
+
+**注册、可调用、向模型声明，是三件不同的事。** `ToolDefinition.exposure` 决定可达方式：
+
+| exposure | 直接向模型声明 | 通过 `ctx.executeTool()` 调用 |
+|---|---|---|
+| `direct` | 激活时声明 | 激活时可调用 |
+| `model-only` | 激活时声明 | 不可调用 |
+| `codemode` | 显式激活才声明 | 注册后可调用，编排工具可列出它 |
+| `deferred` | 显式激活才声明 | 可调用，由工具搜索发现 |
+| `hidden` | 不声明 | 不可调用，激活也无效 |
+
+`prepareLoadout()` 还可隐藏请求里的工具声明，让 codemode 代为编排；这不会从持久 transcript 中删除该工具的活动状态。工具的 `outputSchema` 描述 `structuredContent`，供程序读取；模型仍主要看 `content`。v1.2.0 的 `reachesTools` 声明编排工具可能触及的工具，供 MCP 等延迟注册方在执行前等待必要连接。
 
 ```typescript
 // 完整示例；依赖版本见本书修订记录
@@ -168,13 +182,19 @@ try {
 
 PowerShell 不是把字符串贴给 Bash：它使用自己的 shell 配置、UTF-8 前缀与命令构造，再复用 shell 工具的输出、取消和截断机制。选择它时，模型也需要收到对应的工具定义与提示词。
 
+### 嵌套工具也要经过同一条管道
+
+codemode 让模型写 JavaScript，在 QuickJS 中调用已注册工具；MCP 负责接入远端工具。它们没有绕过工具管道：产品层 `ctx.executeTool()` 复用内核 `runToolCall()` 做参数准备、校验、前后钩子，嵌套事件带 `parentToolCallId`，调用摘要保存在父结果的有界 `nestedCalls` 中。
+
+`runToolCall()` 本身不发事件、不追加消息，产品层才负责嵌套事件与记录。QuickJS 隔离的是脚本环境，暴露给它的宿主工具仍拥有实际的文件或网络能力；工具访问策略仍需在宿主边界实现。
+
 ## 二、五步管道：工具调用不是"调个函数就完了"
 
 类型定义搞清楚了，现在看工具调用的实际执行过程。
 
 还有一道更早的检查：如果模型响应以 `length` 结束，这批 ToolCall 会由 `failToolCallsFromTruncatedMessage` 生成错误结果，不会进入 execute。参数可能只生成了一半，不能拿残缺指令去改文件。
 
-<Diagram file="/assets/260925-ch05-five-step-pipeline.svg" caption="工具调用五步管道" id="260925-ch05-five-step-pipeline" />
+<Diagram file="/assets/261013-ch05-five-step-pipeline.svg" caption="工具调用五步管道" id="261013-ch05-five-step-pipeline" />
 
 **配图说明**：监听器或契约外异常仍可能中断循环；不能把所有错误都视为工具错误。
 
@@ -297,9 +317,11 @@ execute: (toolCallId, params, signal, onUpdate) => Promise<AgentToolResult>
 | 修错 | 把工具的错误结果修正为正常结果 | 返回 `{ isError: false, content: [...] }` |
 | 停止工具续轮 | 声明本次结果无需自然续轮 | 返回 `{ terminate: true }`；需结合整批结果判断 |
 
-合并按 `content`、`details`、`usage`、`terminate`、`isError` 等字段分别使用 `??` 取值，不是递归合并。前置阶段直接生成的结果不会再交给 afterToolCall。
+合并按 `content`、`details`、`usage`、`terminate`、`isError` 等字段分别使用 `??` 取值，不是递归合并。若后置钩子替换 `content` 却未同时返回 `structuredContent`，旧结构化结果会被清除，避免脱敏后的文字与未脱敏的程序数据不一致。前置阶段直接生成的结果不会再交给 afterToolCall。
 
 **`terminate` 不是紧急刹车。** 当前批次照常处理，只有所有最终结果都带 `terminate: true`，才撤掉“执行了工具就再调模型”的默认续轮。一个结果没有这个标记，整批就不满足条件；steering、follow-up 或 `finishTurn` 的 continue 仍可能让循环继续。要理解的是“这批结果是否需要再问模型”，而不是“第一个工具说停，后面的工具就不跑”。
+
+工具现在可直接返回 `isError: true`，保留 `details` / `structuredContent`，不必为了报告业务失败而抛异常。实际执行的调用还会记录 `durationMs`：计量 execute 耗时，不含前后钩子；参数验证失败或被拦截而没有执行的调用没有这个值。
 
 ### 管道的终点：ToolResultMessage
 
@@ -326,7 +348,7 @@ execute: (toolCallId, params, signal, onUpdate) => Promise<AgentToolResult>
 
 ## 三、并行 vs 串行：一个批次的工具不是"一起跑就完了"
 
-<Diagram file="/assets/260925-ch05-parallel-sequential.svg" caption="并行 vs 串行 三阶段设计" id="260925-ch05-parallel-sequential" />
+<Diagram file="/assets/261013-ch05-parallel-sequential.svg" caption="并行 vs 串行 三阶段设计" id="261013-ch05-parallel-sequential" />
 
 **配图说明**：修改文件的工具可以借助执行模式避免同批操作竞争。
 
@@ -456,7 +478,7 @@ async function executePreparedToolCall(prepared, signal, emit) {
         );
         acceptingUpdates = false;
         await Promise.all(updateEvents);
-        return { result, isError: false };
+        return { result, isError: result.isError === true }; // 可不抛异常而显式报告失败
 
     } catch (error) {
         acceptingUpdates = false;
@@ -566,7 +588,7 @@ throw new Error(`Could not edit file: ${path}. ${errorMessage}.`);
 
 **Shell 工具**——bash 与 powershell 共享的执行层会保留已经输出的文本，并给取消、超时、非零退出码附上具体状态。非零退出码在正常返回路径检查；catch 负责处理执行过程中的异常，不应把两段代码误写在一个 catch 里。
 
-注意 Bash 的策略——它**主动识别**已知的错误类型（中止、超时、非零退出码），每种都用 `appendStatus(text, ...)` 把"已经输出的内容"和"具体原因"打包成新的 Error。只有遇到实在识别不了的异常，才 `throw err` 原样抛出。
+v1.2.0 的 Bash 工具可用 `isError: true` 加结构化结果报告非零退出码，保留 stdout 与退出状态；取消和超时仍带明确说明。不能再把所有 shell 失败都解释成“抛一个新的 Error”。抛异常和显式错误结果最终都能进入模型可见的错误消息。
 
 这就是 Pi 的真实设计：**两层错误处理，分层负责**。
 
@@ -599,7 +621,7 @@ throw new Error(`Could not edit file: ${path}. ${errorMessage}.`);
 
 ### 写自定义工具时的最佳实践
 
-借鉴 Bash 工具的写法，自定义工具的 `execute` 应该长这样：
+如果自定义工具选择抛异常报告失败，可以这样组织 `execute`；需要保留结构化数据时，也可以像新版 Bash 那样返回 `isError: true`：
 
 ```typescript
 // 教学简化：省略外围定义，展示数据形状或关键步骤
@@ -630,7 +652,7 @@ execute: async (id, params, signal, onUpdate) => {
 
 ### 一句话总结
 
-工具执行出错时，Pi 不抛异常打断循环，而是把错误编码成一条 `isError: true` 的 ToolResultMessage 发给模型。这里的关键是**两层分工**：工具内部尽量识别已知错误，包装成"为什么错、怎么改"的具体描述（参考 Bash 工具的 try-catch）；框架层接住工具最终抛出的错误，把 `error.message` 原样透传给模型。模型拿到具体的错误信息后，自己决定下一步——重试、换路径、向用户解释。这就是为什么 Pi 的 Agent Loop 能在工具频繁失败的真实场景下保持稳定运行。
+工具执行的常见业务失败会编码成一条 `isError: true` 的 ToolResultMessage 发给模型。这里的关键是**两层分工**：工具内部尽量识别已知错误，返回显式错误结果或抛出带具体描述的异常；框架层接住工具最终抛出的错误，把 `error.message` 原样透传给模型。模型拿到具体的错误信息后，自己决定下一步——重试、换路径、向用户解释。这就是为什么 Pi 的 Agent Loop 能在工具频繁失败的真实场景下保持稳定运行。
 
 ---
 
@@ -777,9 +799,11 @@ ToolResultMessage { content: 文件内容, isError: false }
 
 ---
 
-> **本章关键源码索引**（Pi v0.87.1，固定发布提交）：
-> - [packages/agent/src/agent-loop.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/agent-loop.ts) — 准备、执行、最终处理工具批次
-> - [packages/agent/src/types.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/types.ts) — AgentTool 与 before/after 契约
-> - [packages/coding-agent/src/core/tools/index.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/tools/index.ts) — 八种内置工具
-> - [packages/coding-agent/src/core/tools/powershell.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/tools/powershell.ts) — PowerShell 工具
-> - [packages/coding-agent/src/core/extensions/types.ts#L455](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/extensions/types.ts#L455) — ToolDefinition
+> **本章关键源码索引**（Pi v1.2.0，固定发布提交）：
+> - [packages/agent/src/agent-loop.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/agent-loop.ts) — 准备、执行、最终处理工具批次
+> - [packages/agent/src/types.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/types.ts) — AgentTool 与 before/after 契约
+> - [packages/coding-agent/src/core/tools/index.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/tools/index.ts) — 八种内置工具
+> - [packages/coding-agent/src/core/tools/powershell.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/tools/powershell.ts) — PowerShell 工具
+> - [packages/coding-agent/src/core/extensions/types.ts#L579](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/extensions/types.ts#L579) — ToolDefinition
+> - [packages/coding-agent/src/core/nested-tool-calls.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/nested-tool-calls.ts) — 嵌套调用记录
+> - [packages/coding-agent/src/extensions/codemode/tool.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/extensions/codemode/tool.ts) — codemode 工具与输出契约

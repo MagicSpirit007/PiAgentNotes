@@ -4,7 +4,7 @@
     "packages/coding-agent/src/core/sdk.ts",
     "createAgentSession",
     "export async function createAgentSession",
-    175
+    191
   ],
   [
     1,
@@ -32,12 +32,12 @@
     "packages/coding-agent/src/core/extensions/types.ts",
     "ToolDefinition",
     "export interface ToolDefinition",
-    455
+    579
   ],
   [
     2,
-    "packages/agent/src/harness/agent-harness.ts",
-    "Harness 独立运行实现",
+    "packages/durable/src/harness/harness.ts",
+    "独立 durable Harness",
     null,
     null
   ],
@@ -53,21 +53,21 @@
     "packages/agent/src/agent-loop.ts",
     "runAgentLoop / runLoop",
     "export async function runAgentLoop(",
-    101
+    102
   ],
   [
     3,
     "packages/agent/src/types.ts",
     "FinishTurn 与请求准备契约",
     "export type FinishTurn =",
-    151
+    155
   ],
   [
     3,
     "packages/agent/src/agent.ts",
     "Agent 状态、队列与事件等待",
     "export class Agent",
-    187
+    188
   ],
   [
     3,
@@ -102,7 +102,7 @@
     "packages/coding-agent/src/core/model-runtime.ts",
     "ModelRuntime",
     "export class ModelRuntime",
-    131
+    173
   ],
   [
     4,
@@ -144,14 +144,14 @@
     "packages/coding-agent/src/core/extensions/types.ts",
     "ToolDefinition",
     "export interface ToolDefinition",
-    455
+    579
   ],
   [
     6,
     "packages/ai/src/types.ts",
     "SystemMessage 与四种标准 Message",
     "export interface SystemMessage",
-    491
+    541
   ],
   [
     6,
@@ -214,7 +214,7 @@
     "packages/coding-agent/src/core/system-prompt.ts",
     "结构化提示词",
     "export function buildSystemPromptSections",
-    121
+    128
   ],
   [
     8,
@@ -242,21 +242,21 @@
     "packages/coding-agent/src/core/compaction/compaction.ts",
     "prepareCompaction",
     "export function prepareCompaction",
-    894
+    872
   ],
   [
     9,
     "packages/coding-agent/src/core/compaction/compaction.ts",
     "投影上的切割算法",
     "function findProjectedCutPoint",
-    824
+    802
   ],
   [
     9,
     "packages/coding-agent/src/core/compaction/compaction.ts",
     "投影 token 估算",
     "export function estimateProjectedContextTokens",
-    249
+    227
   ],
   [
     9,
@@ -298,7 +298,7 @@
     "packages/coding-agent/src/core/session-manager.ts",
     "追加式上下文编辑",
     "\tappendContextEdit(",
-    1358
+    1360
   ],
   [
     10,
@@ -309,29 +309,78 @@
   ],
   [
     10,
-    "packages/agent/src/harness/session/types.ts",
-    "Harness Storage / SessionRepo",
+    "packages/durable/src/types.ts",
+    "durable Session / Storage",
     null,
     null
   ],
   [
     10,
-    "packages/agent/src/harness/session/session.ts",
-    "StorageBackedSession",
+    "packages/durable/src/session/session.ts",
+    "createSession",
     null,
     null
   ],
   [
     10,
-    "packages/agent/src/harness/session/jsonl/index.ts",
-    "JsonlSessionRepo",
+    "packages/durable/src/index.ts",
+    "durable 公共导出",
     null,
     null
   ],
   [
     10,
-    "packages/agent/src/harness/session/memory.ts",
-    "MemorySessionRepo",
+    "packages/durable/src/storage/memory.ts",
+    "MemoryStorage",
+    null,
+    null
+  ],
+  [
+    2,
+    "packages/agent/src/index.ts",
+    "精简后的 Agent Core 公共入口",
+    null,
+    null
+  ],
+  [
+    4,
+    "packages/ai/src/providers/openrouter.ts",
+    "按 Key 个性化模型目录",
+    null,
+    null
+  ],
+  [
+    4,
+    "packages/ai/src/utils/event-stream.ts",
+    "专用响应流与耗时",
+    null,
+    null
+  ],
+  [
+    5,
+    "packages/coding-agent/src/core/nested-tool-calls.ts",
+    "嵌套调用记录",
+    null,
+    null
+  ],
+  [
+    5,
+    "packages/coding-agent/src/extensions/codemode/tool.ts",
+    "codemode 工具与输出契约",
+    null,
+    null
+  ],
+  [
+    8,
+    "packages/coding-agent/src/extensions/mcp/index.ts",
+    "内置 MCP 与系统片段",
+    null,
+    null
+  ],
+  [
+    9,
+    "packages/coding-agent/src/core/compaction/utils.ts",
+    "摘要序列化与文件操作追踪",
     null,
     null
   ]

@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import { readdirSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+const { version } = JSON.parse(readFileSync(new URL('../../revisions/source-version.json', import.meta.url), 'utf8'));
 const base = process.env.BOOK_PREVIEW_URL ?? 'http://127.0.0.1:4321';
 const output = new URL('../../revisions/verification/.artifacts/reading/', import.meta.url);
 mkdirSync(output, { recursive: true });
@@ -20,7 +21,7 @@ try {
     assert.equal((await page.goto(`${base}/modules/${slug}`)).status(),200);
     await page.waitForFunction(()=>Array.from(document.querySelectorAll('figure.diagram')).every(f=>f.querySelector('svg')));
     assert.equal(await page.locator('.language-switcher').count(),0);
-    assert.match(await page.locator('header.module-header').innerText(),/0\.87\.1/);
+    assert.ok((await page.locator('header.module-header').innerText()).includes(`v${version}`));
     const nav=await page.locator('.prevnext a').evaluateAll(as=>as.map(a=>a.getAttribute('href')));
     assert.deepEqual(nav,[slugs[index-1],slugs[index+1]].filter(Boolean).map(s=>`/modules/${s}`));
     assert.equal(await page.locator('#left-toc a').count(),10);

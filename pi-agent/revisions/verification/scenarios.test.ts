@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Type } from 'typebox';
-import { Agent, type AgentOptions, type AgentTool } from '@earendil-works/pi-agent-core';
+import { Agent, runToolCall, type AgentOptions, type AgentTool } from '@earendil-works/pi-agent-core';
 import { createModels, InMemoryCredentialStore, normalizeContext, getCurrentTools, getCurrentSystemPrompt } from '@earendil-works/pi-ai';
 import { fauxProvider, fauxAssistantMessage as answer, fauxToolCall as call, type FauxResponseStep } from '@earendil-works/pi-ai/providers/faux';
-import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, serializeConversation, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import finalCheck from './examples/ch07-1.js';
 
 function setup(responses: FauxResponseStep[], extra: Partial<AgentOptions> = {}, tools: AgentTool[] = []) {
@@ -183,4 +183,89 @@ test('book extension continues before settlement; ordinary subscriptions do not 
     assert.ok(log.indexOf('agent_end') < log.indexOf('before_settle'));
     assert.equal(log.at(-1), 'settled');
   } finally { release(); session.dispose(); }
+});
+
+test('v1.2 saves the first user input before any assistant reply, including a branch copy', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pi-book-first-input-'));
+  try {
+    const manager = SessionManager.create(dir, dir);
+    manager.appendModelChange('faux', 'faux');
+    assert.equal(existsSync(manager.getSessionFile()!), false);
+    const input = manager.appendMessage({ role: 'user', content: 'keep this if the request fails', timestamp: 1 });
+    assert.equal(existsSync(manager.getSessionFile()!), true);
+    const reopened = SessionManager.open(manager.getSessionFile()!);
+    assert.equal(reopened.buildSessionContext().messages.find(m => m.role === 'user')?.content, 'keep this if the request fails');
+    const branch = manager.createBranchedSession(input);
+    assert.ok(branch && existsSync(branch));
+    assert.equal(SessionManager.open(branch).buildSessionContext().messages.find(m => m.role === 'user')?.content, 'keep this if the request fails');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('v1.2 explicit tool failures retain structure; rewriting content clears stale structure', async () => {
+  const failure = tool('lookup', async () => ({
+    content: [{ type: 'text', text: 'private error' }], details: { status: 404 },
+    structuredContent: { privateValue: 'secret' }, isError: true,
+  }));
+  const options = {
+    tools: [failure], assistantMessage: answer([call('lookup', {})], { stopReason: 'toolUse' }),
+    context: { systemPrompt: '', messages: [], tools: [failure] },
+  };
+  const raw = await runToolCall(call('lookup', {}), options);
+  assert.equal(raw.isError, true);
+  assert.deepEqual(raw.result.structuredContent, { privateValue: 'secret' });
+  assert.equal(typeof raw.durationMs, 'number');
+  const filtered = await runToolCall(call('lookup', {}), {
+    ...options, afterToolCall: async () => ({ content: [{ type: 'text', text: 'redacted' }] }),
+  });
+  assert.equal(filtered.isError, true);
+  assert.equal(filtered.result.structuredContent, undefined);
+  assert.deepEqual(filtered.result.details, { status: 404 });
+  const blocked = await runToolCall(call('lookup', {}), {
+    ...options, beforeToolCall: async () => ({ block: true, reason: 'blocked' }),
+  });
+  assert.equal(blocked.durationMs, undefined);
+  assert.equal(options.context.messages.length, 0, 'runToolCall does not append transcript messages');
+});
+
+test('v1.2 summary serialization omits thinking without mutating the stored message', () => {
+  const message = answer([{ type: 'thinking', thinking: 'internal reasoning' }, { type: 'text', text: 'visible answer' }]);
+  const serialized = serializeConversation([message]);
+  assert.match(serialized, /visible answer/);
+  assert.doesNotMatch(serialized, /internal reasoning/);
+  assert.equal(message.content[0].type, 'thinking');
+});
+
+test('v1.2 user and idle custom starts both fire before_agent_start while busy', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'pi-book-start-'));
+  const seen: string[] = [];
+  const requests: string[] = [];
+  const faux = fauxProvider({ tokensPerSecond: 0 });
+  faux.setResponses([answer('user answer'), context => { requests.push(JSON.stringify(context)); return answer('custom answer'); }]);
+  const runtime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, modelsStorePath: join(cwd, 'models-cache'), refreshOnCreate: false });
+  runtime.registerNativeProvider(faux.provider);
+  const settings = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } });
+  const loader = new DefaultResourceLoader({ cwd, agentDir: cwd, settingsManager: settings,
+    noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
+    extensionFactories: [(pi: ExtensionAPI) => {
+      pi.on('before_agent_start', (event, ctx) => {
+        assert.equal(ctx.isIdle(), false);
+        if (event.messageType === 'user') seen.push(`user:${event.prompt}`);
+        else {
+          seen.push(`custom:${event.message.customType}`);
+          assert.equal('prompt' in event, false);
+          return { message: { customType: 'start-note', content: 'custom run setup', display: false } };
+        }
+      });
+    }],
+  });
+  await loader.reload();
+  const { session } = await createAgentSession({ cwd, agentDir: cwd, modelRuntime: runtime, model: faux.getModel(), resourceLoader: loader, settingsManager: settings, sessionManager: SessionManager.inMemory(cwd), noTools: 'all' });
+  try {
+    await session.prompt('hello');
+    await session.sendCustomMessage({ customType: 'job', content: 'run custom', display: false }, { triggerTurn: true });
+    assert.deepEqual(seen, ['user:hello', 'custom:job']);
+    assert.equal(faux.state.callCount, 2);
+    assert.match(requests[0], /custom run setup/);
+    assert.equal(session.isIdle, true);
+  } finally { session.dispose(); rmSync(cwd, { recursive: true, force: true }); }
 });

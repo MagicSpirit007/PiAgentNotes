@@ -4,16 +4,16 @@ module: M10
 displayOrder: 10
 status: published
 variant: ts
-sourceVersion: "0.87.1"
+sourceVersion: "1.2.0"
 counterpart: ch10-session.python
 summary: 会话管理：对话的存储、恢复与分叉，Session Tree 如何让 Agent 拥有可回溯的历史。
 prev: ch09-compaction
 diagrams:
-  - id: 260925-ch10-session-tree
-    file: /assets/260925-ch10-session-tree.svg
+  - id: 261013-ch10-session-tree
+    file: /assets/261013-ch10-session-tree.svg
     caption: Session Tree：append-only 的状态变化
-  - id: 260925-ch10-entry-taxonomy
-    file: /assets/260925-ch10-entry-taxonomy.svg
+  - id: 261013-ch10-entry-taxonomy
+    file: /assets/261013-ch10-entry-taxonomy.svg
     caption: 会话条目、当前投影与模型请求
 ---
 
@@ -54,7 +54,7 @@ Pi 的 coding-agent **没有走这条路**。它选了**本地 JSONL 文件**—
 - **零依赖、零运维**：不需要装 mysql，不需要起服务，开箱即用
 - **可读、可调试**：JSONL 是纯文本，可以 `cat` / `grep` / 用编辑器直接打开看，调试时一目了然
 
-Pi 还有独立的 Harness 存储体系，支持不同后端，但默认 createAgentSession 走的是 coding-agent 自己的 SessionManager。不能把两套名字相近的接口混作一层；本章 §七会交代它们的边界。
+Pi 还有独立的 pi-durable 持久运行体系，支持存储抽象，但默认 createAgentSession 走的是 coding-agent 自己的 SessionManager。不能把两套名字相近的接口混作一层；本章 §七会交代它们的边界。
 
 所以“存在哪里”先记住主线：本地 JSONL，按工作目录分组，可显式指定 sessionDir。再看数据怎样组织。
 
@@ -296,7 +296,7 @@ e1 (model_change)
 
 这就是 Session Tree 的完整叙事：**对话是一棵树，消息和状态变化各自成为节点，回退/分支不删数据，只是移动指针**。
 
-<Diagram file="/assets/260925-ch10-session-tree.svg" caption="Session Tree：append-only 的状态变化" id="260925-ch10-session-tree" />
+<Diagram file="/assets/261013-ch10-session-tree.svg" caption="Session Tree：append-only 的状态变化" id="261013-ch10-session-tree" />
 
 **配图说明**：e3–e5 的旧探索仍保留；新消息 e6 以 e2 为父节点。
 
@@ -357,7 +357,7 @@ coding-agent 的 `SessionEntry` 在这一版本有十一种成员。message 内�
 
 提示词和工具变化通常存为 message 中的 SystemMessage，并没有另外发明 prompt_change、tool_change 两种 coding-agent 条目。模型与思考设置则有自己的状态条目。分类不同，是因为恢复时需要执行的动作不同。
 
-<Diagram file="/assets/260925-ch10-entry-taxonomy.svg" caption="会话条目、当前投影与模型请求" id="260925-ch10-entry-taxonomy" />
+<Diagram file="/assets/261013-ch10-entry-taxonomy.svg" caption="会话条目、当前投影与模型请求" id="261013-ch10-entry-taxonomy" />
 
 > 类型定义与投影实现在 `packages/coding-agent/src/core/session-manager.ts`。不要用 Harness 的 Entry 联合类型替代它。
 
@@ -644,20 +644,17 @@ if (restored?.role === "user") console.log(restored.content);
 
 > 实现：`packages/coding-agent/src/core/session-manager.ts` 的 `_appendEntry` 更新内存索引，再交给 `_persist` 决定何时写盘
 
-### 延迟写入：避免"有问无答"的半截对话
+### 首次写入：有用户输入就保存
 
-有一个写入策略细节：**首次 assistant 消息到达前，写入会延迟**。具体规则分四种情况：
+v1.2.0 不再等待首次 assistant 回复。新会话只有模型、思考级别或 system 等设置条目时，暂不创建文件；一旦有 user 或 assistant 消息，就把 header 与积压条目一起写入。
 
-| 已有 assistant？ | 已 flushed？ | 行为 |
-|----------------|------------|------|
-| 没有 | 已 flushed | 立即 append 当前 entry |
-| 没有 | 未 flushed | 标记为"未 flushed"，**不写盘**——等 assistant 到来 |
-| 有 | 未 flushed | **首次批量写入**（包含 header + 所有积压 entry），用 `openSync("wx") + writeFileSync` 独占创建文件，标记为已 flushed |
-| 有 | 已 flushed | 立即 append 当前 entry |
+| 已 flushed？ | 已有 user 或 assistant？ | 行为 |
+|---|---|---|
+| 否 | 否 | 设置条目只留内存，启动后直接退出不会留下空会话 |
+| 否 | 是 | `openSync("wx")` 独占创建并写入全部条目 |
+| 是 | 任意 | 当前条目立即追加 |
 
-为什么要这套复杂逻辑？为了避免"有问无答"的半截对话残留——用户问了一句但 Agent 没回（网络断了、API 报错了），如果立即把每条用户消息都写盘，下次打开会话时就会看到一条孤零零的用户消息悬在那儿，没有对应回复。延迟到首次 assistant 消息到达再批量写入，避免过早创建未开始响应的文件；assistant 错误消息也算 assistant，不能据此保证它是一轮成功问答，更不能把独占创建等同于崩溃时原子提交。
-
-之后所有 entry 都立即 append——首次 flush 后这个机制就不再起作用，因为已经"上了轨道"。
+例如首次请求迟迟没有返回，用户输入仍已保存，重开后可以恢复。创建分支副本也遵循同样的“已有对话”条件。独占创建防止覆盖同名文件，但不是崩溃时的数据库事务保证。
 
 ### 偶尔的全文件重写
 
@@ -672,21 +669,19 @@ append-only 描述的是日常历史操作：分支、摘要和上下文编辑�
 
 ---
 
-## 七、两套实现：主链路与 Harness 各有存储边界
+## 七、两套实现：SessionManager 与 pi-durable
 
-第 2 章介绍过 Harness 这条基础设施分支。这里把名字核对清楚即可，不必为了读懂 coding-agent 再学一套数据库框架。
+v1.0.0 已删除 agent-core 里的旧实验性 Harness 和 session storage 导出。持久运行转向 `@earendil-works/pi-durable`；这并不改变本书主线 `createAgentSession()` 使用的 SessionManager。
 
-| | 本书主链路：coding-agent | Harness 基础设施 |
+| | 本书主线：coding-agent | 独立 pi-durable |
 |---|---|---|
-| 管理入口 | SessionManager | SessionRepo、StorageBackedSession |
-| 存储抽象 | 直接管理自己的 JSONL 文件 | Storage 接口、提交与查询 |
-| 文件与内存入口 | create/open/inMemory | JsonlSessionRepo、MemorySessionRepo |
-| 文件格式 | 当前 header version 3 | 独立 JSONL 存储格式，有旧版导入适配 |
-| 用途 | 默认 SDK / CLI 会话 | 分支、lane、持久运行等通用能力 |
+| 管理入口 | `SessionManager` | `createSession(storage, ...)`、`Harness` |
+| 存储边界 | 自己的 JSONL 与 SessionEntry | `Storage`、Session、conversation / task / document |
+| 内存入口 | `SessionManager.inMemory()` | `MemoryStorage` |
+| 源码 | `coding-agent/src/core/session-manager.ts` | `durable/src/session/session.ts`、`durable/src/types.ts` |
+| 适用范围 | 默认 CLI / SDK 对话与分支 | 通用持久运行与应用存储集成 |
 
-新版源码中应查 `harness/session/types.ts` 的 Storage 和 SessionRepo、`session.ts` 的 StorageBackedSession，以及 `jsonl/`、`memory.ts`。旧版的 SessionStorage、JsonlSessionStorage、InMemorySessionStorage 名称不能直接拿来套当前代码。
-
-两边既不是继承关系，也没有共享同一份 SessionEntry 联合类型。要把默认 coding-agent 接到数据库，需要专门设计其集成边界；实现 Harness 的 Storage 不会自动替换 createAgentSession 的 SessionManager。
+旧的 `SessionRepo`、`StorageBackedSession`、`JsonlSessionRepo` 和 `MemorySessionRepo` 不应再从 agent-core 导入。两套实现没有共享同一份 SessionEntry；实现 durable 的 Storage 也不会自动替换默认编码会话的 SessionManager。
 
 ---
 
@@ -698,7 +693,7 @@ append-only 描述的是日常历史操作：分支、摘要和上下文编辑�
 
 | 维度 | 回答什么 | 一般做法 | Pi 的选择 |
 |------|---------|---------|----------|
-| **存储介质** | 存哪里？ | mysql 等数据库 | 本地 JSONL 文件（另有独立 Harness 存储体系） |
+| **存储介质** | 存哪里？ | mysql 等数据库 | 本地 JSONL 文件（另有独立 pi-durable 存储体系） |
 | **数据结构** | 长什么样？ | 线性数组 | 树（Session Tree） |
 
 这两个维度可以独立做选择。下次你设计任何"对话历史持久化"或类似的状态保存系统，先问自己这两个问题，再决定方案——不要把它们粘成一团。
@@ -735,12 +730,12 @@ append-only 描述的是日常历史操作：分支、摘要和上下文编辑�
 
 ---
 
-> **本章关键源码索引**（Pi v0.87.1，固定发布提交）：
-> - [packages/coding-agent/src/core/session-manager.ts#L183](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/session-manager.ts#L183) — SessionEntry
-> - [packages/coding-agent/src/core/session-manager.ts#L543](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/session-manager.ts#L543) — buildSessionProjection
-> - [packages/coding-agent/src/core/session-manager.ts#L1358](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/session-manager.ts#L1358) — 追加式上下文编辑
-> - [packages/coding-agent/src/core/session-manager.ts#L987](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/session-manager.ts#L987) — SessionManager 持久化与分支
-> - [packages/agent/src/harness/session/types.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/harness/session/types.ts) — Harness Storage / SessionRepo
-> - [packages/agent/src/harness/session/session.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/harness/session/session.ts) — StorageBackedSession
-> - [packages/agent/src/harness/session/jsonl/index.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/harness/session/jsonl/index.ts) — JsonlSessionRepo
-> - [packages/agent/src/harness/session/memory.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/harness/session/memory.ts) — MemorySessionRepo
+> **本章关键源码索引**（Pi v1.2.0，固定发布提交）：
+> - [packages/coding-agent/src/core/session-manager.ts#L183](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/session-manager.ts#L183) — SessionEntry
+> - [packages/coding-agent/src/core/session-manager.ts#L543](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/session-manager.ts#L543) — buildSessionProjection
+> - [packages/coding-agent/src/core/session-manager.ts#L1360](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/session-manager.ts#L1360) — 追加式上下文编辑
+> - [packages/coding-agent/src/core/session-manager.ts#L987](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/session-manager.ts#L987) — SessionManager 持久化与分支
+> - [packages/durable/src/types.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/durable/src/types.ts) — durable Session / Storage
+> - [packages/durable/src/session/session.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/durable/src/session/session.ts) — createSession
+> - [packages/durable/src/index.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/durable/src/index.ts) — durable 公共导出
+> - [packages/durable/src/storage/memory.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/durable/src/storage/memory.ts) — MemoryStorage

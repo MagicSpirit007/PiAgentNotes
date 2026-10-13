@@ -4,19 +4,19 @@ module: M08
 displayOrder: 8
 status: published
 variant: ts
-sourceVersion: "0.87.1"
+sourceVersion: "1.2.0"
 summary: LLM 窗口固定、对话无限增长。本章看 Pi 在输入与历史两端布置的上下文工程防线。
 prev: ch07-event-driven
 next: ch09-compaction
 diagrams:
-  - id: 260925-ch08-truncate-strategy
-    file: /assets/260925-ch08-truncate-strategy.svg
+  - id: 261013-ch08-truncate-strategy
+    file: /assets/261013-ch08-truncate-strategy.svg
     caption: 工具输出截断：双重限制 + 双向策略
-  - id: 260925-ch08-claude-md-recursion
-    file: /assets/260925-ch08-claude-md-recursion.svg
+  - id: 261013-ch08-claude-md-recursion
+    file: /assets/261013-ch08-claude-md-recursion.svg
     caption: 多层 CLAUDE.md 递归 + Skills 懒加载
-  - id: 260925-ch08-full-pipeline
-    file: /assets/260925-ch08-full-pipeline.svg
+  - id: 261013-ch08-full-pipeline
+    file: /assets/261013-ch08-full-pipeline.svg
     caption: 一次工具调用经过的完整上下文工程链路
 counterpart: ch08-context-engineering.python
 ---
@@ -107,7 +107,7 @@ Pi 在这个环节实现了 **4 种互补的技巧**。这一章我们就挨个�
 2. **切断多字节字符**——直接按字节切，会把一个 emoji 切成两个无效码元
 3. **单行就超限**——比如 `grep` 命中一行 100KB 的压缩 JS，怎么切？
 
-Pi 用一套**双重限制 + 边界安全**的算法解决这三个问题，实现全在 [`truncate.ts`](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/tools/truncate.ts)。
+Pi 用一套**双重限制 + 边界安全**的算法解决这三个问题，实现全在 [`truncate.ts`](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/tools/truncate.ts)。
 
 ### 双重限制：行数 + 字节，先触者胜
 
@@ -130,7 +130,7 @@ Pi 给所有工具输出默认定义了两个上限常量（源码在 `truncate.
 
 同样的双重限制，从哪头裁是另一个问题。Pi 提供两个函数，**核心差异只是遍历方向**：
 
-<Diagram file="/assets/260925-ch08-truncate-strategy.svg" caption="工具输出截断：双重限制 + 双向策略" id="260925-ch08-truncate-strategy" />
+<Diagram file="/assets/261013-ch08-truncate-strategy.svg" caption="工具输出截断：双重限制 + 双向策略" id="261013-ch08-truncate-strategy" />
 
 **配图说明**：单行、字节和行数限制要分别处理；截断不同于会话压缩。
 
@@ -202,7 +202,7 @@ bash 工具据此在输出末尾追加一行提示（`bash.ts`）：
 
 这行字**也会进 LLM 上下文**——告诉模型"如果你想看完整输出，去 read 这个文件"。这是截断机制的"逃生通道"：默认截断省 token，需要时 LLM 自己拉完整内容。
 
-> **流式输出补充**：bash 命令是流式输出的（stdout 一行一行吐，可能持续几分钟）。Pi 有个 [`OutputAccumulator`](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/tools/output-accumulator.ts) 类负责实时收集、控制内存、把超限内容写到临时文件——但最终截断仍然走上面这套 `truncateTail` 算法。流式累积本身是工程实现细节，不属于"上下文工程"的核心机制，这里不展开，需要深挖的读者直接看源码。
+> **流式输出补充**：bash 命令是流式输出的（stdout 一行一行吐，可能持续几分钟）。Pi 有个 [`OutputAccumulator`](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/tools/output-accumulator.ts) 类负责实时收集、控制内存、把超限内容写到临时文件——但最终截断仍然走上面这套 `truncateTail` 算法。流式累积本身是工程实现细节，不属于"上下文工程"的核心机制，这里不展开，需要深挖的读者直接看源码。
 
 > **小结**：双重限制 + 双向策略 + 边界安全 + 兜底逃生——这是 Pi 工具输出截断的四件套。自定义工具也应根据自己的输出制定限制。
 
@@ -216,7 +216,7 @@ bash 工具据此在输出末尾追加一行提示（`bash.ts`）：
 
 比如用户在 monorepo 里开发，希望 LLM 知道："这个子项目用 pnpm 不用 npm"、"测试用 vitest"。如果每次对话都要手动说一遍，体验极差。
 
-Pi 的方案在 [`system-prompt.ts`](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/system-prompt.ts) 和 [`resource-loader.ts`](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/resource-loader.ts) 里——核心是两件事：**多级项目指令发现与组装** + **Skills 懒加载**。
+Pi 的方案在 [`system-prompt.ts`](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/system-prompt.ts) 和 [`resource-loader.ts`](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/resource-loader.ts) 里——核心是两件事：**多级项目指令发现与组装** + **Skills 懒加载**。
 
 ### 多级上下文文件：每层选一份，再从外到内组合
 
@@ -234,7 +234,7 @@ Pi 的方案在 [`system-prompt.ts`](https://github.com/earendil-works/pi/blob/f
 
 全局目录默认是 `~/.pi/agent`，也可由配置改变。路径会去重；嵌套 linked worktree 若有自己的规范，还会避开对应的主工作树规范，避免同一仓库作用域重复加载。
 
-<Diagram file="/assets/260925-ch08-claude-md-recursion.svg" caption="项目指令发现、资源信任与按需加载" id="260925-ch08-claude-md-recursion" />
+<Diagram file="/assets/261013-ch08-claude-md-recursion.svg" caption="项目指令发现、资源信任与按需加载" id="261013-ch08-claude-md-recursion" />
 
 ### 信任与资源加载：读一段文字，和执行扩展是两回事
 
@@ -304,7 +304,7 @@ Pi 的方案是 `formatSkillsForPrompt`（`skills.ts`）——**只放轻量清�
 </available_skills>
 ```
 
-清单只在选中的工具含 read 或 bash 时组装，优先使用 read；仅启用 powershell 不会自动触发这个条件。清单顶上还有一句指令——"**Use the read tool to load a skill's file when the task matches its description**"——这就是懒加载契约：清单仍占 token，只有全文的开销推迟到需要时。
+清单只在选中的工具含 read 或 bash 时组装，优先使用直接声明的 read；仅启用 powershell 不会自动触发这个条件。若读取工具被 `prepareLoadout()` 隐藏声明但仍可由编排工具调用，Skill 清单继续保留，提示改为间接读取，不再指名一个模型无法直接调用的工具。清单仍占 token，只有全文的开销推迟到需要时。
 
 对比"全文塞进系统提示词"：
 
@@ -333,7 +333,9 @@ preamble        角色与任务定位
 
 上面的缩进只是列表示意，实际由命名片段生成标签。`customPrompt` 替换默认前言及默认工具、规则、文档部分；`forceSystemPrompt` 则作为不透明的完整文本。普通结构化提示词通过 `buildSystemPromptState` 得到 content 与 sections，再进入 SystemMessage。
 
-注意，v0.87.1 的默认骨架**没有每轮自动追加 Current date**。需要当前时间可以由扩展显式提供。不要把旧版提示词的尾部照搬成新版事实。
+注意，v1.2.0 的默认骨架**没有每轮自动追加 Current date**。需要当前时间可以由扩展显式提供。不要把旧版提示词的尾部照搬成新版事实。
+
+内置 MCP 扩展还维护 `mcp_servers` 系统片段，列出服务器简述。默认经 codemode 暴露的 MCP 工具按需搜索，不把完整目录塞进 codemode 描述；没有 direct 工具的服务器后台连接，在脚本或搜索需要它时再等待。`prepareLoadout()` 隐藏的工具也不应继续出现在默认工具规则里。
 
 提示词和工具集合变化时，AgentSession 比较已经重放出来的状态与本轮目标，追加系统更新；未变化的片段不用重新伪造一条用户消息。这样第 6 章的 SystemMessage 就与资源加载接上了：资源负责“内容从哪来”，系统记录负责“何时生效”。
 
@@ -402,7 +404,7 @@ Compaction 解决的是"线性对话过长"。但 Pi 还有一个独特特性—
 
 直接把整个旧分支接进上下文？太占空间，违背了 §一的精神。
 
-Pi 的解法是 [`branch-summarization.ts`](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/compaction/branch-summarization.ts)——**给被放弃的分支生成摘要，注入新分支的上下文**。
+Pi 的解法是 [`branch-summarization.ts`](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/compaction/branch-summarization.ts)——**给被放弃的分支生成摘要，注入新分支的上下文**。
 
 ### LCA 算法：找"分叉点"
 
@@ -425,7 +427,7 @@ Pi 的解法是 [`branch-summarization.ts`](https://github.com/earendil-works/pi
 收集到 entries 后，`generateBranchSummary`（`branch-summarization.ts`）用 LLM 生成摘要。它复用了 Compaction 的几件底层工具：
 
 - **`convertToLlm`**——把消息翻译成 LLM 格式
-- **`serializeConversation`**——把消息序列化成对话文本
+- **`serializeConversation`**——把可见文本、工具调用和结果序列化成对话文本；v1.2.0 不把 thinking 块送去摘要
 - **`SUMMARIZATION_SYSTEM_PROMPT`**——共享的系统提示词
 
 也就是说，**两套摘要机制共享同一套底层管道，只是 prompt 不同**。
@@ -503,14 +505,14 @@ LLM 看到这个，立刻知道"之前试过触发器方案，因为性能问题
 
 ## 七、全景链路：一次请求经过的所有上下文处理
 
-<Diagram file="/assets/260925-ch08-full-pipeline.svg" caption="从资源与会话投影到模型请求" id="260925-ch08-full-pipeline" />
+<Diagram file="/assets/261013-ch08-full-pipeline.svg" caption="从资源与会话投影到模型请求" id="261013-ch08-full-pipeline" />
 
 把前几章接起来，一次请求不只是拿 messages 数组直接发 HTTP：
 
 ```text
 资源加载：指令 / skills / prompts / extensions / 工具
     ↓
-用户输入展开 → before_agent_start 调整提示词与注入消息
+用户输入展开 / 空闲自定义消息启动 → before_agent_start（按 messageType 区分）
     ↓
 SessionManager 追加输入、系统提示词与工具变化
     ↓
@@ -558,7 +560,7 @@ normalizeContext：TranscriptContext → Provider 私有请求
 
 这是工程化的智慧——**承认每个机制的能力边界，组合使用**。新手常犯的错误是"找到一招就用到底"（比如只靠 LLM 自己处理超长输入），结果遇到具体场景就炸。Pi 的方案是：每一层都做最朴素、最可靠的事，多层叠加形成完整防线。
 
-> 实现：散落在 `packages/coding-agent/src/core/{tools,system-prompt,compaction}/*.ts` 与 `packages/agent/src/harness/`
+> 实现：散落在 `packages/coding-agent/src/core/{tools,system-prompt,compaction}/*.ts`；通用持久运行的另一条实现位于 `packages/durable/`
 
 ### 2. 加法 + 减法：上下文工程的双向操作
 
@@ -612,9 +614,10 @@ Compaction 的结果存为 CompactionEntry，"追加到 Session Tree"。Branch S
 
 ---
 
-> **本章关键源码索引**（Pi v0.87.1，固定发布提交）：
-> - [packages/coding-agent/src/core/resource-loader.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/resource-loader.ts) — 项目指令优先级与资源信任
-> - [packages/coding-agent/src/core/system-prompt.ts#L121](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/system-prompt.ts#L121) — 结构化提示词
-> - [packages/coding-agent/src/core/tools/truncate.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/tools/truncate.ts) — truncateHead / truncateTail
-> - [packages/coding-agent/src/core/skills.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/skills.ts) — Skill 清单与按需加载
-> - [packages/coding-agent/src/core/compaction/branch-summarization.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/compaction/branch-summarization.ts) — 分支路径收集与摘要生成
+> **本章关键源码索引**（Pi v1.2.0，固定发布提交）：
+> - [packages/coding-agent/src/core/resource-loader.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/resource-loader.ts) — 项目指令优先级与资源信任
+> - [packages/coding-agent/src/core/system-prompt.ts#L128](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/system-prompt.ts#L128) — 结构化提示词
+> - [packages/coding-agent/src/core/tools/truncate.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/tools/truncate.ts) — truncateHead / truncateTail
+> - [packages/coding-agent/src/core/skills.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/skills.ts) — Skill 清单与按需加载
+> - [packages/coding-agent/src/core/compaction/branch-summarization.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/compaction/branch-summarization.ts) — 分支路径收集与摘要生成
+> - [packages/coding-agent/src/extensions/mcp/index.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/extensions/mcp/index.ts) — 内置 MCP 与系统片段

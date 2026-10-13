@@ -101,7 +101,7 @@ AgentSession 处理一次输入
 
 这最后一层很重要。`agent_end` 只保证**这一趟底层循环结束**，不保证 coding-agent 已经把所有善后工作做完。接 Web 服务时，如果在第一个 `agent_end` 就关闭输出通道，后续重试的结果可能还没发出来。第 7 章会专门拆 `agent_settled`。
 
-![底层运行、Turn 与会话结束的边界](assets/260925-ch03-trace-turn-nesting.svg)
+![底层运行、Turn 与会话结束的边界](assets/261013-ch03-trace-turn-nesting.svg)
 
 首轮 `turn_start` 在 `runAgentLoop()` 入口发出；后续轮次则在 `runLoop()` 完成下一轮准备后发出。这个顺序解释了为什么你在事件日志里不会看到首轮重复开始。
 
@@ -147,7 +147,7 @@ prompt("帮我读一下 src/main.ts")
 
 还有三类信号能影响下一轮：工具结果、消息队列，以及 `finishTurn` 的决定。因此“没有工具调用就停”只适合解释最简 Loop，不能当作生产实现的完整规则。
 
-![模型响应、工具结果与 finishTurn 的循环决策](assets/260925-ch03-stopreason-flowchart.svg)
+![模型响应、工具结果与 finishTurn 的循环决策](assets/261013-ch03-stopreason-flowchart.svg)
 
 ---
 
@@ -298,7 +298,9 @@ done/error  → 用最终消息收尾，发 message_end
 
 关键不是“每个 token 都存一条消息”，而是**同一个消息位置的内容不断变完整**。这样 UI 可以实时展示，历史里又不会挤满碎片。若请求在 start 之前就失败，流可以直接给出 error；循环也要补齐这条失败消息的生命周期。
 
-![流式响应原地替换的时间线](assets/260925-ch03-streaming-replace.svg)
+![流式响应原地替换的时间线](assets/261013-ch03-streaming-replace.svg)
+
+v1.2.0 还在最终助手消息上记录本次请求的 `thinkingLevel`；`AssistantMessageEventStream` 统一记录 `durationMs`。时间统计是观测数据，不参与循环是否继续的决策。
 
 这还解释了订阅事件时为什么不能随手保存一个可变引用，过几秒再写数据库：你以为保存的是“当时”，看到的却可能已经是“后来”。跨异步边界需要自己复制必要字段。
 
@@ -324,7 +326,7 @@ steering 像开会时有人递来纸条，follow-up 像散会后再看待办。�
 
 队列还有 `all` 和 `one-at-a-time` 两种取法。源码在耗时的下一轮准备之后补查 steering，但只在此前没有选出消息时补查，避免 one-at-a-time 模式一轮吞掉两条。
 
-![两种队列的读取时机与 finishTurn 决策](assets/260925-ch03-steering-vs-followup.svg)
+![两种队列的读取时机与 finishTurn 决策](assets/261013-ch03-steering-vs-followup.svg)
 
 ### 4.9 从底层结束到会话结束
 
@@ -344,7 +346,7 @@ steering 像开会时有人递来纸条，follow-up 像散会后再看待办。�
 
 **第四，底层循环与产品善后分开。** Agent 管执行，AgentSession 管会话、恢复与扩展。两者各自的“结束”不能混用。
 
-![Agent 循环与 AgentSession 的职责边界](assets/260925-ch03-kernel-onion.svg)
+![Agent 循环与 AgentSession 的职责边界](assets/261013-ch03-kernel-onion.svg)
 
 ---
 
@@ -357,8 +359,8 @@ Loop 跑起来了——我们知道它怎么调用模型、怎么执行工具。
 
 ---
 
-> **本章关键源码索引**（Pi v0.87.1，固定发布提交）：
-> - [packages/agent/src/agent-loop.ts#L101](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/agent-loop.ts#L101) — runAgentLoop / runLoop
-> - [packages/agent/src/types.ts#L151](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/types.ts#L151) — FinishTurn 与请求准备契约
-> - [packages/agent/src/agent.ts#L187](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/agent/src/agent.ts#L187) — Agent 状态、队列与事件等待
-> - [packages/coding-agent/src/core/agent-session.ts](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/src/core/agent-session.ts) — Session 自动后续工作与收尾
+> **本章关键源码索引**（Pi v1.2.0，固定发布提交）：
+> - [packages/agent/src/agent-loop.ts#L102](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/agent-loop.ts#L102) — runAgentLoop / runLoop
+> - [packages/agent/src/types.ts#L155](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/types.ts#L155) — FinishTurn 与请求准备契约
+> - [packages/agent/src/agent.ts#L188](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/agent/src/agent.ts#L188) — Agent 状态、队列与事件等待
+> - [packages/coding-agent/src/core/agent-session.ts](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/coding-agent/src/core/agent-session.ts) — Session 自动后续工作与收尾
