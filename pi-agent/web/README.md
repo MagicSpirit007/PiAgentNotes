@@ -14,7 +14,7 @@
 - **实战上手篇**：用一个真实场景（企业数据分析助手）搭一个能上线的垂直 Agent。无语言切换，每章一张卡、一个「阅读 →」按钮。
 - **源码精读篇**：系统拆解 SDK 源码设计。每章 TS + Python 双版本，顶栏一键切换。
 
-> 🌐 在线版本：[本仓镜像 · GitHub Pages](https://magicspirit007.github.io/pi-latest/) ／ [原站](https://dg-ai-notes.pages.dev)
+> 🌐 在线版本：[本仓镜像 · GitHub Pages](https://magicspirit007.github.io/PiAgentNotes/) ／ [原站](https://dg-ai-notes.pages.dev)
 >
 > 🪞 内容来自原仓库 [buchidonggua/dg-ai-notes](https://github.com/buchidonggua/dg-ai-notes)（作者：冬瓜），本仓只跟进「源码精读 · TypeScript」部分。
 
@@ -132,7 +132,9 @@ npm run build:pdf          # 导出源码精读篇 PDF（TS + Python）
 
 仓库自带 GitHub Pages 工作流 [`.github/workflows/deploy-pages.yml`](../../.github/workflows/deploy-pages.yml)，推送到 `main` 且改动落在 `pi-agent/web/**` 时自动构建并发布。
 
-线上地址：**https://magicspirit007.github.io/pi-latest/**（GitHub Pages 项目站点，站点根目录在 `/pi-latest/`）。
+线上地址：**https://magicspirit007.github.io/PiAgentNotes/**（GitHub Pages 项目站点，站点根目录在 `/PiAgentNotes/`）。
+
+工作流在构建前通过 `actions/configure-pages` 读取 Pages 的 `origin` 和 `base_path`，自动注入 `SITE_URL` / `SITE_BASE`；仓库改名或配置自定义域名后，无需手动修改部署路径，重新运行部署即可。
 
 站点内所有站内绝对路径都经过 `src/utils/url.ts` 的 `withBase()`，MDX 正文里的 `](/modules/xxx)` 由 `astro.config.mjs` 的 rehype 插件在编译期补 base，因此同一份内容既能部署在域名根路径，也能部署在子路径。
 
@@ -140,7 +142,7 @@ npm run build:pdf          # 导出源码精读篇 PDF（TS + Python）
 
 ```bash
 cd pi-agent/web
-SITE_URL=https://magicspirit007.github.io SITE_BASE=/pi-latest npm run build
+SITE_URL=https://magicspirit007.github.io SITE_BASE=/PiAgentNotes npm run build
 ```
 
 部署到域名根路径时不用传这两个变量，默认值是 `https://dg-ai-notes.pages.dev` 和 `/`。

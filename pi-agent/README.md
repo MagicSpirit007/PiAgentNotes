@@ -6,7 +6,7 @@
 >
 > 🪞 **本仓库是镜像站**：内容来自原仓库 [buchidonggua/dg-ai-notes](https://github.com/buchidonggua/dg-ai-notes)（作者：冬瓜），只跟进「源码精读 · TypeScript」部分，版权归原作者（[代码 MIT](../LICENSE) / [文档 CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/)）。
 >
-> 🌐 在线阅读：[**本仓镜像**](https://magicspirit007.github.io/pi-latest/) · [原站](https://dg-ai-notes.pages.dev)
+> 🌐 在线阅读：[**本仓镜像**](https://magicspirit007.github.io/PiAgentNotes/) · [原站](https://dg-ai-notes.pages.dev)
 
 ## 🚀 实战上手篇 · 7 章
 
@@ -30,7 +30,7 @@
 
 10 章系统拆解 pi-agent 的源码设计与实现，每章回答「是什么 / 怎么做 / 为什么」。提供 **TypeScript 版已更新至 Pi v1.2.0**。
 
-> 路径：[pi_source_dive/typescript/](./pi_source_dive/typescript/) · 在线版见 [本仓镜像](https://magicspirit007.github.io/pi-latest/) ／ [原站](https://dg-ai-notes.pages.dev)
+> 路径：[pi_source_dive/typescript/](./pi_source_dive/typescript/) · 在线版见 [本仓镜像](https://magicspirit007.github.io/PiAgentNotes/) ／ [原站](https://dg-ai-notes.pages.dev)
 
 ```
 ch01 开篇总览    →  ch02 三层架构   →  ch03 Agent Loop  →  ch04 模型调用  →  ch05 工具系统
@@ -57,7 +57,7 @@ ch06 消息系统    →  ch07 事件驱动   →  ch08 上下文工程  →  ch
 
 | 方式 | 入口 | 适合场景 |
 |------|------|----------|
-| 🌐 **Web 在线版**（推荐） | [本仓镜像](https://magicspirit007.github.io/pi-latest/) ／ [原站](https://dg-ai-notes.pages.dev) | 双系列切换、配图联动、主题切换 |
+| 🌐 **Web 在线版**（推荐） | [本仓镜像](https://magicspirit007.github.io/PiAgentNotes/) ／ [原站](https://dg-ai-notes.pages.dev) | 双系列切换、配图联动、主题切换 |
 | 📥 **Markdown 下载版** | 上表链接 | 配合 AI 边读边问、对照源码 |
 | 📕 **PDF 版** | [GitHub Releases](https://github.com/buchidonggua/dg-ai-notes/releases) | 离线阅读、打印、长期存档（源码精读篇） |
 

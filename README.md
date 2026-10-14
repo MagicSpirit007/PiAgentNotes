@@ -8,7 +8,7 @@
 
 > 🌐 **在线阅读**
 >
-> - 🪞 **本仓镜像（GitHub Pages）**：[magicspirit007.github.io/pi-latest](https://magicspirit007.github.io/pi-latest/) —— 源码精读 TS 版随本仓更新
+> - 🪞 **本仓镜像（GitHub Pages）**：[magicspirit007.github.io/PiAgentNotes](https://magicspirit007.github.io/PiAgentNotes/) —— 源码精读 TS 版随本仓更新
 > - 🏠 **原站**：[dg-ai-notes.pages.dev](https://dg-ai-notes.pages.dev) —— 双轨教程 · 沉浸式阅读 · 深浅色主题
 >
 > [![在线电子书首页](./assets/web-home.png)](https://dg-ai-notes.pages.dev)
@@ -29,7 +29,7 @@
 
 不是贴代码加注释，而是每章回答「是什么 / 怎么做 / 为什么」：从三层架构、Agent Loop 一路讲到上下文工程、会话管理，把 Pi 的设计取舍讲透。**TypeScript 版已更新至 Pi v1.2.0**，配有 25 张新版源码图。原有 [Agent Loop 实验场](./pi-agent/notebooks/agent-loop.ipynb) 保留旧版内容。
 
-**怎么读**：[TS 版目录](./pi-agent/pi_source_dive/typescript/) · [在线版](https://magicspirit007.github.io/pi-latest/) · [PDF 下载（原仓库 Releases）](https://github.com/buchidonggua/dg-ai-notes/releases)
+**怎么读**：[TS 版目录](./pi-agent/pi_source_dive/typescript/) · [在线版](https://magicspirit007.github.io/PiAgentNotes/) · [PDF 下载（原仓库 Releases）](https://github.com/buchidonggua/dg-ai-notes/releases)
 
 ### 🚀 实战案例 · 7 章搭一个能上线的 Agent
 
